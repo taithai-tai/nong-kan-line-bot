@@ -72,6 +72,10 @@ def get_csrf_token() -> str:
     return token
 
 
+def secure_text_equal(left: str, right: str) -> bool:
+    return hmac.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
+
+
 def verify_csrf_token() -> None:
     token = request.form.get("csrf_token", "")
     if not hmac.compare_digest(token, session.get("csrf_token", "")):
@@ -271,7 +275,7 @@ def admin_login():
         ), 503
 
     password = request.form.get("password", "")
-    if hmac.compare_digest(password, ADMIN_PASSWORD):
+    if secure_text_equal(password, ADMIN_PASSWORD):
         session["admin_logged_in"] = True
         session.pop("csrf_token", None)
         return redirect(url_for("admin_dashboard"))
