@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 from pathlib import Path
+from typing import Optional
 
 import requests
 from dotenv import load_dotenv
@@ -97,6 +98,83 @@ def load_knowledge_base() -> dict:
 def save_knowledge_base(knowledge_base: dict) -> None:
     formatted_json = json.dumps(knowledge_base, ensure_ascii=False, indent=2)
     KNOWLEDGE_BASE_PATH.write_text(formatted_json + "\n", encoding="utf-8")
+
+
+def extract_json_object(text: str) -> dict:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.lower().startswith("json"):
+            cleaned = cleaned[4:].strip()
+
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("AI did not return a JSON object")
+
+    parsed = json.loads(cleaned[start : end + 1])
+    if not isinstance(parsed, dict):
+        raise ValueError("AI returned JSON, but it was not an object")
+    return parsed
+
+
+def train_knowledge_base_with_ai(instruction: str) -> tuple[Optional[dict], str]:
+    if not OPENROUTER_API_KEY:
+        logger.warning("OPENROUTER_API_KEY is not configured.")
+        return None, AI_UNAVAILABLE_MESSAGE
+
+    current_knowledge_base = load_knowledge_base()
+    current_text = json.dumps(current_knowledge_base, ensure_ascii=False, indent=2)
+    system_prompt = f"""
+คุณคือระบบแก้ไขฐานความรู้ของ LINE OA Bot ชื่อ "น้องก้าน"
+
+หน้าที่:
+- อ่านฐานความรู้ JSON ปัจจุบัน
+- อ่านคำสั่งเทรนจากผู้ดูแล
+- คืนค่า JSON object ใหม่ทั้งก้อนเท่านั้น
+
+กฎสำคัญ:
+- ห้ามตอบเป็นคำอธิบาย ห้ามใส่ Markdown ห้ามครอบด้วย ```json
+- ห้ามเดาข้อมูลที่ผู้ดูแลไม่ได้ให้มา
+- ถ้าผู้ดูแลให้ข้อมูลสินค้า ราคา โปรโมชัน วิธีสั่งซื้อ การจัดส่ง หรือข้อมูลบริษัท ให้ใส่ลง JSON ให้เหมาะสม
+- ถ้าข้อมูลใหม่ไม่เข้าหมวดเดิม ให้เพิ่ม key ที่เหมาะสมได้ เช่น faqs หรือ training_notes
+- ต้องรักษาข้อมูลเดิมไว้ ยกเว้นผู้ดูแลสั่งแก้ ลบ หรือแทนที่ชัดเจน
+- ถ้าผู้ดูแลสั่งลบ ให้ลบเฉพาะข้อมูลที่ระบุชัดเจน
+
+ฐานความรู้ JSON ปัจจุบัน:
+{current_text}
+""".strip()
+
+    payload = {
+        "model": AI_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": instruction},
+        ],
+        "temperature": 0.1,
+        "max_tokens": 2200,
+    }
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "X-Title": APP_NAME,
+    }
+    if APP_URL:
+        headers["HTTP-Referer"] = APP_URL
+
+    try:
+        response = requests.post(
+            f"{AI_API_BASE_URL}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=AI_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"]
+        return extract_json_object(content), "น้องก้านเรียนรู้และอัปเดตฐานความรู้เรียบร้อยค่ะ"
+    except (requests.RequestException, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
+        logger.exception("Knowledge training request failed.")
+        return None, "ขอโทษค่ะ รอบนี้น้องก้านยังอัปเดตฐานความรู้ไม่สำเร็จ ลองเขียนคำสั่งให้ชัดขึ้นอีกครั้งนะคะ"
 
 
 def verify_line_signature(body: bytes, signature: str) -> bool:
@@ -302,8 +380,25 @@ def admin_dashboard():
     if not is_admin_logged_in():
         return redirect(url_for("admin_login_page"))
 
-    knowledge_base = load_knowledge_base()
-    knowledge_text = json.dumps(knowledge_base, ensure_ascii=False, indent=2)
+    return render_admin_dashboard(message=request.args.get("message", ""))
+
+
+def render_admin_dashboard(
+    *,
+    message: str = "",
+    status_code: int = 200,
+    test_answer: str = "",
+    test_question: str = "",
+    train_instruction: str = "",
+    train_result: str = "",
+    knowledge_base: Optional[dict] = None,
+    raw_knowledge_text: Optional[str] = None,
+):
+    if raw_knowledge_text is None:
+        if knowledge_base is None:
+            knowledge_base = load_knowledge_base()
+        raw_knowledge_text = json.dumps(knowledge_base, ensure_ascii=False, indent=2)
+
     return render_template(
         "admin_dashboard.html",
         ai_model=AI_MODEL,
@@ -315,11 +410,13 @@ def admin_dashboard():
         has_line_channel_secret=bool(LINE_CHANNEL_SECRET),
         has_openrouter_api_key=bool(OPENROUTER_API_KEY),
         knowledge_path=str(KNOWLEDGE_BASE_PATH),
-        knowledge_text=knowledge_text,
-        message=request.args.get("message", ""),
-        test_answer="",
-        test_question="",
-    )
+        knowledge_text=raw_knowledge_text,
+        message=message,
+        test_answer=test_answer,
+        test_question=test_question,
+        train_instruction=train_instruction,
+        train_result=train_result,
+    ), status_code
 
 
 @app.post("/admin/save")
@@ -331,43 +428,51 @@ def admin_save_knowledge_base():
     try:
         knowledge_base = json.loads(raw_json)
     except json.JSONDecodeError as exc:
-        return render_template(
-            "admin_dashboard.html",
-            ai_model=AI_MODEL,
-            ai_api_base_url=AI_API_BASE_URL,
-            app_name=APP_NAME,
-            app_url=APP_URL,
-            csrf_token=get_csrf_token(),
-            has_line_channel_access_token=bool(LINE_CHANNEL_ACCESS_TOKEN),
-            has_line_channel_secret=bool(LINE_CHANNEL_SECRET),
-            has_openrouter_api_key=bool(OPENROUTER_API_KEY),
-            knowledge_path=str(KNOWLEDGE_BASE_PATH),
-            knowledge_text=raw_json,
+        return render_admin_dashboard(
             message=f"JSON ยังไม่ถูกต้อง: {exc}",
-            test_answer="",
-            test_question="",
-        ), 400
+            raw_knowledge_text=raw_json,
+            status_code=400,
+        )
 
     if not isinstance(knowledge_base, dict):
-        return render_template(
-            "admin_dashboard.html",
-            ai_model=AI_MODEL,
-            ai_api_base_url=AI_API_BASE_URL,
-            app_name=APP_NAME,
-            app_url=APP_URL,
-            csrf_token=get_csrf_token(),
-            has_line_channel_access_token=bool(LINE_CHANNEL_ACCESS_TOKEN),
-            has_line_channel_secret=bool(LINE_CHANNEL_SECRET),
-            has_openrouter_api_key=bool(OPENROUTER_API_KEY),
-            knowledge_path=str(KNOWLEDGE_BASE_PATH),
-            knowledge_text=raw_json,
+        return render_admin_dashboard(
             message="ฐานความรู้ต้องเป็น JSON object เท่านั้นค่ะ",
-            test_answer="",
-            test_question="",
-        ), 400
+            raw_knowledge_text=raw_json,
+            status_code=400,
+        )
 
     save_knowledge_base(knowledge_base)
     return redirect(url_for("admin_dashboard", message="บันทึกฐานความรู้เรียบร้อยค่ะ"))
+
+
+@app.post("/admin/train")
+def admin_train_knowledge_base():
+    require_admin()
+    verify_csrf_token()
+
+    instruction = request.form.get("instruction", "").strip()
+    if not instruction:
+        return render_admin_dashboard(
+            message="กรุณาพิมพ์สิ่งที่ต้องการสอนน้องก้านก่อนค่ะ",
+            status_code=400,
+        )
+
+    updated_knowledge_base, result_message = train_knowledge_base_with_ai(instruction)
+    if updated_knowledge_base is None:
+        return render_admin_dashboard(
+            message=result_message,
+            train_instruction=instruction,
+            train_result=result_message,
+            status_code=502,
+        )
+
+    save_knowledge_base(updated_knowledge_base)
+    return render_admin_dashboard(
+        message=result_message,
+        knowledge_base=updated_knowledge_base,
+        train_instruction=instruction,
+        train_result=result_message,
+    )
 
 
 @app.post("/admin/test")
@@ -376,22 +481,9 @@ def admin_test_question():
     verify_csrf_token()
 
     question = request.form.get("question", "").strip()
-    knowledge_base = load_knowledge_base()
-    knowledge_text = json.dumps(knowledge_base, ensure_ascii=False, indent=2)
     answer = ask_ai(question) if question else "กรุณาพิมพ์คำถามที่ต้องการทดสอบค่ะ"
 
-    return render_template(
-        "admin_dashboard.html",
-        ai_model=AI_MODEL,
-        ai_api_base_url=AI_API_BASE_URL,
-        app_name=APP_NAME,
-        app_url=APP_URL,
-        csrf_token=get_csrf_token(),
-        has_line_channel_access_token=bool(LINE_CHANNEL_ACCESS_TOKEN),
-        has_line_channel_secret=bool(LINE_CHANNEL_SECRET),
-        has_openrouter_api_key=bool(OPENROUTER_API_KEY),
-        knowledge_path=str(KNOWLEDGE_BASE_PATH),
-        knowledge_text=knowledge_text,
+    return render_admin_dashboard(
         message="ผลทดสอบคำตอบ",
         test_answer=answer,
         test_question=question,

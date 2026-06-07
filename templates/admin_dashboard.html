@@ -17,7 +17,7 @@
       --warn: #a95f00;
       --ok: #18734d;
       --soft: #f2eee7;
-      --danger: #b3342f;
+      --bubble: #e7f3ed;
     }
     * { box-sizing: border-box; }
     body {
@@ -50,11 +50,16 @@
       font-size: 26px;
       line-height: 1.2;
     }
-    .subtitle {
-      margin: 4px 0 0;
-      color: var(--muted);
-      font-size: 14px;
+    h2 {
+      margin: 0 0 12px;
+      font-size: 19px;
     }
+    .subtitle, .hint {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+    .subtitle { margin: 4px 0 0; }
     main {
       padding: 24px 0 42px;
       display: grid;
@@ -67,34 +72,26 @@
       border-radius: 8px;
       padding: 18px;
     }
-    h2 {
-      margin: 0 0 12px;
-      font-size: 18px;
-    }
-    h3 {
-      margin: 0;
-      font-size: 16px;
-    }
-    label {
-      display: block;
-      margin: 0 0 6px;
-      color: var(--muted);
-      font-size: 13px;
-      font-weight: 800;
-    }
-    input, textarea {
+    textarea, input {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 10px 12px;
+      padding: 12px;
       color: var(--ink);
       background: #fffdf9;
-      font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    textarea {
+      min-height: 190px;
+      resize: vertical;
     }
     input { min-height: 44px; }
-    textarea {
-      min-height: 92px;
-      resize: vertical;
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
     }
     button, .link-button {
       min-height: 42px;
@@ -118,70 +115,68 @@
       border: 1px solid var(--line);
     }
     .ghost:hover { background: var(--soft); }
-    .danger {
-      color: var(--danger);
-      border-color: #e3b8b3;
+    .actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
     }
-    .danger:hover { background: #fff1ef; }
     .message {
       margin: 0 0 14px;
       border-radius: 8px;
       padding: 12px 14px;
-      background: #e7f3ed;
+      background: var(--bubble);
       color: var(--ok);
       font-weight: 700;
     }
-    .tabs {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 14px;
-      overflow-x: auto;
-      padding-bottom: 2px;
+    .chat-panel {
+      display: grid;
+      gap: 14px;
     }
-    .tab-button {
-      background: transparent;
-      color: var(--ink);
+    .bubble {
+      border-radius: 8px;
+      padding: 14px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+    }
+    .bubble.user {
+      background: #fffdf9;
       border: 1px solid var(--line);
     }
-    .tab-button[aria-selected="true"] {
-      background: var(--accent);
-      color: white;
-      border-color: var(--accent);
+    .bubble.bot {
+      background: var(--bubble);
+      color: #16573f;
     }
-    .tab-panel { display: none; }
-    .tab-panel.active { display: block; }
-    .field-grid {
+    .examples {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
+      gap: 8px;
     }
-    .field { display: grid; gap: 0; }
-    .wide { grid-column: 1 / -1; }
-    .stack { display: grid; gap: 14px; }
-    .mini-card {
+    .example {
+      min-height: 38px;
+      padding: 8px 10px;
+      justify-content: flex-start;
+      text-align: left;
+      white-space: normal;
+      font-size: 13px;
+    }
+    details {
+      margin-top: 18px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #fffdf9;
-      padding: 14px;
-      display: grid;
-      gap: 12px;
     }
-    .mini-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
+    summary {
+      padding: 12px 14px;
+      cursor: pointer;
+      font-weight: 800;
     }
-    .small-button {
-      min-height: 34px;
-      padding: 0 10px;
-      font-size: 13px;
-    }
-    .actions {
-      margin-top: 14px;
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
+    .json-editor {
+      min-height: 420px;
+      border: 0;
+      border-top: 1px solid var(--line);
+      border-radius: 0 0 8px 8px;
+      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
     .status-list {
       display: grid;
@@ -214,34 +209,10 @@
       line-height: 1.7;
       white-space: pre-wrap;
     }
-    .hint {
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.6;
-    }
-    details {
-      margin-top: 18px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fffdf9;
-    }
-    summary {
-      padding: 12px 14px;
-      cursor: pointer;
-      font-weight: 800;
-    }
-    .json-editor {
-      min-height: 360px;
-      border: 0;
-      border-top: 1px solid var(--line);
-      border-radius: 0 0 8px 8px;
-      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    }
     @media (max-width: 860px) {
       main { grid-template-columns: 1fr; }
       .bar { align-items: flex-start; flex-direction: column; padding: 16px 0; }
-      .field-grid { grid-template-columns: 1fr; }
-      .tabs { flex-wrap: nowrap; }
+      .examples { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -250,7 +221,7 @@
     <div class="bar">
       <div>
         <h1>น้องก้าน Admin</h1>
-        <p class="subtitle">แก้ฐานความรู้แบบฟอร์มง่าย ๆ แล้วทดสอบคำตอบก่อนให้ลูกค้าใช้งานจริง</p>
+        <p class="subtitle">พิมพ์สอนน้องก้านเหมือนแชท แล้วระบบจะอัปเดตฐานความรู้ให้</p>
       </div>
       <form method="post" action="{{ url_for('admin_logout') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -261,117 +232,52 @@
 
   <main>
     <section>
-      <h2>แก้ข้อมูลที่น้องก้านใช้ตอบลูกค้า</h2>
+      <h2>เทรนน้องก้านด้วยข้อความ</h2>
       {% if message %}
         <div class="message">{{ message }}</div>
       {% endif %}
 
-      <div class="tabs" role="tablist" aria-label="หมวดฐานความรู้">
-        <button class="tab-button" type="button" data-tab="company" aria-selected="true">บริษัท</button>
-        <button class="tab-button" type="button" data-tab="products" aria-selected="false">สินค้า</button>
-        <button class="tab-button" type="button" data-tab="services" aria-selected="false">บริการ</button>
-        <button class="tab-button" type="button" data-tab="promotions" aria-selected="false">โปรโมชัน</button>
-        <button class="tab-button" type="button" data-tab="ordering" aria-selected="false">สั่งซื้อ/จัดส่ง</button>
+      <div class="chat-panel">
+        {% if train_instruction %}
+          <div class="bubble user">{{ train_instruction }}</div>
+        {% endif %}
+        {% if train_result %}
+          <div class="bubble bot">{{ train_result }}</div>
+        {% else %}
+          <div class="bubble bot">พิมพ์สิ่งที่อยากให้น้องก้านรู้ เช่น สินค้า ราคา โปรโมชัน วิธีสั่งซื้อ หรือเงื่อนไขจัดส่ง แล้วกดเทรนได้เลยค่ะ</div>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('admin_train_knowledge_base') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label for="instruction">ข้อความที่ต้องการสอน</label>
+          <textarea id="instruction" name="instruction" placeholder="ตัวอย่าง: เพิ่มสินค้า กระถางแคคตัสจิ๋ว ราคา 159 บาท มีสีขาวและเขียว จัดส่ง Kerry 2-3 วัน">{{ train_instruction }}</textarea>
+          <div class="actions">
+            <button type="submit">เทรนน้องก้าน</button>
+          </div>
+        </form>
+
+        <div>
+          <p class="hint">ตัวอย่างคำสั่ง กดเพื่อใส่ในช่องด้านบน</p>
+          <div class="examples">
+            <button class="ghost example" type="button" data-example="เพิ่มสินค้า ชุดปลูกต้นอ่อน ราคา 290 บาท มีเมล็ด ดิน และกระถาง พร้อมส่ง">เพิ่มสินค้าใหม่</button>
+            <button class="ghost example" type="button" data-example="แก้ค่าส่งเป็น ค่าส่งเริ่มต้น 50 บาท ฟรีค่าส่งเมื่อซื้อครบ 1,000 บาท">แก้ค่าส่ง</button>
+            <button class="ghost example" type="button" data-example="เพิ่มโปรโมชัน ซื้อครบ 500 บาท ลด 50 บาท ใช้ได้ถึงสิ้นเดือนนี้">เพิ่มโปรโมชัน</button>
+            <button class="ghost example" type="button" data-example="ลบโปรโมชันเก่าที่หมดอายุแล้วออกทั้งหมด">ลบข้อมูลเก่า</button>
+          </div>
+        </div>
       </div>
 
-      <form method="post" action="{{ url_for('admin_save_knowledge_base') }}" id="knowledge-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <textarea hidden name="knowledge_base" id="knowledge-base-json">{{ knowledge_text }}</textarea>
-
-        <div class="tab-panel active" id="panel-company">
-          <div class="field-grid">
-            <div class="field">
-              <label for="company-name">ชื่อบริษัท</label>
-              <input id="company-name" data-path="company.name">
-            </div>
-            <div class="field">
-              <label for="contact-line">LINE / ช่องทางติดต่อ</label>
-              <input id="contact-line" data-path="company.contact.line">
-            </div>
-            <div class="field wide">
-              <label for="company-description">ข้อมูลบริษัท</label>
-              <textarea id="company-description" data-path="company.description"></textarea>
-            </div>
-            <div class="field">
-              <label for="contact-phone">เบอร์โทร</label>
-              <input id="contact-phone" data-path="company.contact.phone">
-            </div>
-            <div class="field">
-              <label for="contact-address">ที่อยู่</label>
-              <input id="contact-address" data-path="company.contact.address">
-            </div>
-            <div class="field wide">
-              <label for="handoff-note">วิธีให้เจ้าหน้าที่ติดต่อกลับ</label>
-              <textarea id="handoff-note" data-path="handoff.staff_contact_note"></textarea>
-            </div>
-            <div class="field wide">
-              <label for="handoff-message">ข้อความเมื่อไม่มีข้อมูล</label>
-              <textarea id="handoff-message" data-path="handoff.message"></textarea>
-            </div>
+      <details>
+        <summary>ขั้นสูง: ตรวจหรือแก้ฐานความรู้ JSON เอง</summary>
+        <form method="post" action="{{ url_for('admin_save_knowledge_base') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <textarea class="json-editor" name="knowledge_base" spellcheck="false">{{ knowledge_text }}</textarea>
+          <div class="actions" style="padding: 0 14px 14px;">
+            <button type="submit">บันทึก JSON โดยตรง</button>
+            <a class="link-button ghost" href="{{ url_for('health_check') }}" target="_blank" rel="noreferrer">เช็กสถานะบอต</a>
           </div>
-        </div>
-
-        <div class="tab-panel" id="panel-products">
-          <div class="stack" id="products-list"></div>
-          <div class="actions">
-            <button type="button" class="ghost" id="add-product">เพิ่มสินค้า</button>
-          </div>
-        </div>
-
-        <div class="tab-panel" id="panel-services">
-          <div class="stack" id="services-list"></div>
-          <div class="actions">
-            <button type="button" class="ghost" id="add-service">เพิ่มบริการ</button>
-          </div>
-        </div>
-
-        <div class="tab-panel" id="panel-promotions">
-          <div class="stack" id="promotions-list"></div>
-          <div class="actions">
-            <button type="button" class="ghost" id="add-promotion">เพิ่มโปรโมชัน</button>
-          </div>
-        </div>
-
-        <div class="tab-panel" id="panel-ordering">
-          <div class="field-grid">
-            <div class="field wide">
-              <label for="pricing-policy">นโยบายราคา</label>
-              <textarea id="pricing-policy" data-path="pricing.policy"></textarea>
-            </div>
-            <div class="field wide">
-              <label for="ordering-steps">ขั้นตอนการสั่งซื้อ</label>
-              <textarea id="ordering-steps" data-list-path="ordering.how_to_order" placeholder="ใส่ 1 ข้อต่อ 1 บรรทัด"></textarea>
-            </div>
-            <div class="field wide">
-              <label for="payment-methods">ช่องทางชำระเงิน</label>
-              <textarea id="payment-methods" data-list-path="ordering.payment_methods" placeholder="ใส่ 1 ช่องทางต่อ 1 บรรทัด"></textarea>
-            </div>
-            <div class="field wide">
-              <label for="shipping-methods">วิธีจัดส่ง</label>
-              <textarea id="shipping-methods" data-list-path="shipping.methods" placeholder="ใส่ 1 วิธีต่อ 1 บรรทัด"></textarea>
-            </div>
-            <div class="field">
-              <label for="delivery-time">ระยะเวลาจัดส่ง</label>
-              <input id="delivery-time" data-path="shipping.delivery_time">
-            </div>
-            <div class="field">
-              <label for="shipping-fee">ค่าจัดส่ง</label>
-              <input id="shipping-fee" data-path="shipping.shipping_fee">
-            </div>
-          </div>
-        </div>
-
-        <details>
-          <summary>ขั้นสูง: ดู/แก้ JSON โดยตรง</summary>
-          <textarea class="json-editor" id="advanced-json" spellcheck="false">{{ knowledge_text }}</textarea>
-        </details>
-
-        <div class="actions">
-          <button type="submit">บันทึกฐานความรู้</button>
-          <button type="button" class="ghost" id="refresh-json">อัปเดต JSON จากฟอร์ม</button>
-          <a class="link-button ghost" href="{{ url_for('health_check') }}" target="_blank" rel="noreferrer">เช็กสถานะบอต</a>
-        </div>
-      </form>
+        </form>
+      </details>
     </section>
 
     <aside>
@@ -384,8 +290,7 @@
         <div class="status-item"><span>ฐานความรู้</span><span>{{ knowledge_path }}</span></div>
       </div>
 
-      <p class="hint">ค่า API keys และโมเดลให้แก้ใน Railway Environment Variables เพื่อความปลอดภัย หน้าเว็บนี้ใช้แก้ข้อมูลที่บอตใช้ตอบลูกค้าเท่านั้น</p>
-      <p class="hint">ถ้าใช้งานบน Railway โดยไม่มี volume หรือฐานข้อมูลถาวร ข้อมูลที่แก้ผ่านหน้านี้อาจหายหลัง redeploy/restart ควรนำ JSON ที่แก้แล้วไปอัปเดตใน GitHub ด้วย</p>
+      <p class="hint">ข้อมูลที่สอนจะถูกบันทึกลงฐานความรู้ที่บอตใช้ตอบลูกค้า ถ้าใช้งานบน Railway โดยไม่มี volume หรือฐานข้อมูลถาวร ข้อมูลที่แก้ผ่านหน้านี้อาจหายหลัง redeploy/restart ควรนำ JSON ที่แก้แล้วไปอัปเดตใน GitHub ด้วย</p>
 
       <form class="test-box" method="post" action="{{ url_for('admin_test_question') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -401,225 +306,13 @@
   </main>
 
   <script>
-    const initialText = {{ knowledge_text|tojson }};
-    let data = {};
-
-    try {
-      data = JSON.parse(initialText || "{}");
-    } catch {
-      data = {};
-    }
-
-    const templates = {
-      product: { name: "", description: "", price: "", availability: "" },
-      service: { name: "", description: "" },
-      promotion: { name: "", details: "", valid_until: "" }
-    };
-
-    function clone(value) {
-      return JSON.parse(JSON.stringify(value));
-    }
-
-    function getPath(object, path, fallback = "") {
-      return path.split(".").reduce((current, key) => {
-        if (current && Object.prototype.hasOwnProperty.call(current, key)) return current[key];
-        return undefined;
-      }, object) ?? fallback;
-    }
-
-    function setPath(object, path, value) {
-      const keys = path.split(".");
-      let cursor = object;
-      keys.slice(0, -1).forEach((key) => {
-        if (!cursor[key] || typeof cursor[key] !== "object" || Array.isArray(cursor[key])) cursor[key] = {};
-        cursor = cursor[key];
-      });
-      cursor[keys[keys.length - 1]] = value;
-    }
-
-    function listToText(value) {
-      return Array.isArray(value) ? value.join("\n") : "";
-    }
-
-    function textToList(value) {
-      return value.split("\n").map((item) => item.trim()).filter(Boolean);
-    }
-
-    function fillSimpleFields() {
-      document.querySelectorAll("[data-path]").forEach((field) => {
-        field.value = getPath(data, field.dataset.path, "");
-      });
-      document.querySelectorAll("[data-list-path]").forEach((field) => {
-        field.value = listToText(getPath(data, field.dataset.listPath, []));
-      });
-    }
-
-    function inputField(label, value, key, multiline = false) {
-      const safeValue = value ?? "";
-      if (multiline) {
-        return `
-          <div class="field wide">
-            <label>${label}</label>
-            <textarea data-key="${key}">${escapeHtml(safeValue)}</textarea>
-          </div>
-        `;
-      }
-      return `
-        <div class="field">
-          <label>${label}</label>
-          <input data-key="${key}" value="${escapeHtml(safeValue)}">
-        </div>
-      `;
-    }
-
-    function escapeHtml(value) {
-      return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;");
-    }
-
-    function renderCards(containerId, items, kind) {
-      const container = document.getElementById(containerId);
-      const list = Array.isArray(items) && items.length ? items : [clone(templates[kind])];
-      container.innerHTML = list.map((item, index) => {
-        const title = kind === "product" ? "สินค้า" : kind === "service" ? "บริการ" : "โปรโมชัน";
-        const fields = kind === "product"
-          ? `
-            ${inputField("ชื่อสินค้า", item.name, "name")}
-            ${inputField("ราคา", item.price, "price")}
-            ${inputField("สถานะสินค้า", item.availability, "availability")}
-            ${inputField("รายละเอียดสินค้า", item.description, "description", true)}
-          `
-          : kind === "service"
-            ? `
-              ${inputField("ชื่อบริการ", item.name, "name")}
-              ${inputField("รายละเอียดบริการ", item.description, "description", true)}
-            `
-            : `
-              ${inputField("ชื่อโปรโมชัน", item.name, "name")}
-              ${inputField("วันหมดอายุ / เงื่อนไข", item.valid_until, "valid_until")}
-              ${inputField("รายละเอียดโปรโมชัน", item.details, "details", true)}
-            `;
-        return `
-          <div class="mini-card" data-kind="${kind}">
-            <div class="mini-card-header">
-              <h3>${title} ${index + 1}</h3>
-              <button type="button" class="ghost danger small-button" data-remove-card>ลบ</button>
-            </div>
-            <div class="field-grid">${fields}</div>
-          </div>
-        `;
-      }).join("");
-      bindRemoveButtons(container);
-    }
-
-    function bindRemoveButtons(container) {
-      container.querySelectorAll("[data-remove-card]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const card = button.closest(".mini-card");
-          const group = card.parentElement;
-          if (group.querySelectorAll(".mini-card").length === 1) {
-            card.querySelectorAll("input, textarea").forEach((field) => field.value = "");
-            return;
-          }
-          card.remove();
-        });
-      });
-    }
-
-    function collectCards(containerId, kind) {
-      return Array.from(document.querySelectorAll(`#${containerId} .mini-card`)).map((card) => {
-        const item = clone(templates[kind]);
-        card.querySelectorAll("[data-key]").forEach((field) => {
-          item[field.dataset.key] = field.value.trim();
-        });
-        return item;
-      }).filter((item) => Object.values(item).some(Boolean));
-    }
-
-    function addCard(containerId, kind) {
-      const current = collectCards(containerId, kind);
-      current.push(clone(templates[kind]));
-      renderCards(containerId, current, kind);
-    }
-
-    function collectFormData() {
-      const next = clone(data);
-      document.querySelectorAll("[data-path]").forEach((field) => {
-        setPath(next, field.dataset.path, field.value.trim());
-      });
-      document.querySelectorAll("[data-list-path]").forEach((field) => {
-        setPath(next, field.dataset.listPath, textToList(field.value));
-      });
-      next.products = collectCards("products-list", "product");
-      next.services = collectCards("services-list", "service");
-      next.promotions = collectCards("promotions-list", "promotion");
-      return next;
-    }
-
-    function syncJsonFromForm() {
-      data = collectFormData();
-      const formatted = JSON.stringify(data, null, 2);
-      document.getElementById("advanced-json").value = formatted;
-      document.getElementById("knowledge-base-json").value = formatted;
-    }
-
-    function syncFormFromAdvancedJson() {
-      const raw = document.getElementById("advanced-json").value;
-      data = JSON.parse(raw);
-      fillSimpleFields();
-      renderCards("products-list", data.products, "product");
-      renderCards("services-list", data.services, "service");
-      renderCards("promotions-list", data.promotions, "promotion");
-      document.getElementById("knowledge-base-json").value = JSON.stringify(data, null, 2);
-    }
-
-    document.querySelectorAll(".tab-button").forEach((button) => {
+    const instruction = document.getElementById("instruction");
+    document.querySelectorAll("[data-example]").forEach((button) => {
       button.addEventListener("click", () => {
-        document.querySelectorAll(".tab-button").forEach((tab) => tab.setAttribute("aria-selected", "false"));
-        document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.remove("active"));
-        button.setAttribute("aria-selected", "true");
-        document.getElementById(`panel-${button.dataset.tab}`).classList.add("active");
+        instruction.value = button.dataset.example;
+        instruction.focus();
       });
     });
-
-    document.getElementById("add-product").addEventListener("click", () => addCard("products-list", "product"));
-    document.getElementById("add-service").addEventListener("click", () => addCard("services-list", "service"));
-    document.getElementById("add-promotion").addEventListener("click", () => addCard("promotions-list", "promotion"));
-
-    document.getElementById("refresh-json").addEventListener("click", () => {
-      syncJsonFromForm();
-    });
-
-    document.getElementById("advanced-json").addEventListener("change", () => {
-      try {
-        syncFormFromAdvancedJson();
-      } catch {
-        alert("JSON ยังไม่ถูกต้องค่ะ แก้ให้ถูกก่อนนะคะ");
-      }
-    });
-
-    document.getElementById("knowledge-form").addEventListener("submit", (event) => {
-      const details = document.querySelector("details");
-      if (details.open) {
-        try {
-          syncFormFromAdvancedJson();
-          return;
-        } catch {
-          event.preventDefault();
-          alert("JSON ยังไม่ถูกต้องค่ะ แก้ให้ถูกก่อนบันทึกนะคะ");
-          return;
-        }
-      }
-      syncJsonFromForm();
-    });
-
-    fillSimpleFields();
-    renderCards("products-list", data.products, "product");
-    renderCards("services-list", data.services, "service");
-    renderCards("promotions-list", data.promotions, "promotion");
   </script>
 </body>
 </html>
