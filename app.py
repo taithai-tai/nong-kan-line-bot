@@ -146,6 +146,40 @@ def add_training_history_entry(
     return entry
 
 
+def update_training_history_entry(entry_id: str, **updates) -> Optional[dict]:
+    history = load_training_history()
+    updated_entry = None
+    for entry in history:
+        if entry.get("id") != entry_id:
+            continue
+        entry.update(updates)
+        updated_entry = entry
+        break
+
+    if updated_entry is not None:
+        save_training_history(history)
+    return updated_entry
+
+
+def public_training_history_entry(entry: dict) -> dict:
+    status = entry.get("status", "")
+    status_label = {
+        "success": "สำเร็จ",
+        "failed": "ไม่สำเร็จ",
+        "pending": "กำลังเทรน",
+    }.get(status, status or "-")
+    return {
+        "id": entry.get("id", ""),
+        "created_at": entry.get("created_at", ""),
+        "instruction": entry.get("instruction", ""),
+        "result_message": entry.get("result_message", ""),
+        "status": status,
+        "status_label": status_label,
+        "reverted": bool(entry.get("reverted")),
+        "can_revert": status == "success" and not entry.get("reverted"),
+    }
+
+
 def training_history_to_messages(history: list[dict]) -> list[dict]:
     messages = []
     for entry in history[-12:]:
@@ -535,35 +569,64 @@ def admin_train_knowledge_base():
     require_admin()
     verify_csrf_token()
 
+    is_async_request = request.headers.get("X-Requested-With") == "fetch"
     instruction = request.form.get("instruction", "").strip()
     if not instruction:
+        if is_async_request:
+            return jsonify(
+                {
+                    "ok": False,
+                    "message": "กรุณาพิมพ์สิ่งที่ต้องการสอนน้องก้านก่อนค่ะ",
+                }
+            ), 400
         return render_admin_dashboard(
             message="กรุณาพิมพ์สิ่งที่ต้องการสอนน้องก้านก่อนค่ะ",
             status_code=400,
         )
 
     before_knowledge_base = load_knowledge_base()
+    history_entry = add_training_history_entry(
+        instruction=instruction,
+        result_message="กำลังเทรนน้องก้านอยู่ค่ะ...",
+        status="pending",
+        before_snapshot=before_knowledge_base,
+    )
     updated_knowledge_base, result_message = train_knowledge_base_with_ai(instruction)
     if updated_knowledge_base is None:
-        add_training_history_entry(
-            instruction=instruction,
+        updated_entry = update_training_history_entry(
+            history_entry["id"],
             result_message=result_message,
             status="failed",
-            before_snapshot=before_knowledge_base,
-        )
+        ) or history_entry
+        if is_async_request:
+            return jsonify(
+                {
+                    "ok": False,
+                    "message": result_message,
+                    "entry": public_training_history_entry(updated_entry),
+                }
+            ), 502
         return render_admin_dashboard(
             message=result_message,
             status_code=502,
         )
 
     save_knowledge_base(updated_knowledge_base)
-    add_training_history_entry(
-        instruction=instruction,
+    updated_entry = update_training_history_entry(
+        history_entry["id"],
         result_message=result_message,
         status="success",
-        before_snapshot=before_knowledge_base,
         after_snapshot=updated_knowledge_base,
-    )
+    ) or history_entry
+    if is_async_request:
+        return jsonify(
+            {
+                "ok": True,
+                "message": result_message,
+                "entry": public_training_history_entry(updated_entry),
+                "knowledge_text": json.dumps(updated_knowledge_base, ensure_ascii=False, indent=2),
+            }
+        )
     return render_admin_dashboard(
         message=result_message,
         knowledge_base=updated_knowledge_base,

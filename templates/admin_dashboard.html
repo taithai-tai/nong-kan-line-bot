@@ -378,7 +378,7 @@
 
       <details open>
         <summary>ประวัติการเทรน</summary>
-        <div class="history-list">
+        <div class="history-list" id="history-list">
           {% if training_history %}
             {% for entry in training_history %}
               <div class="history-item">
@@ -450,20 +450,98 @@
       bubble.textContent = text;
       chatWindow.appendChild(bubble);
       chatWindow.scrollTop = chatWindow.scrollHeight;
+      return bubble;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function renderHistoryItem(entry) {
+      const createdAt = entry.created_at ? entry.created_at.slice(0, 19).replace("T", " ") : "";
+      const reverted = entry.reverted ? "· ย้อนกลับแล้ว" : "";
+      const revertForm = entry.can_revert ? `
+        <form method="post" action="{{ url_for('admin_revert_training_history') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="entry_id" value="${escapeHtml(entry.id)}">
+          <button class="ghost warning small-button" type="submit">ย้อนก่อนรายการนี้</button>
+        </form>
+      ` : "";
+      return `
+        <div class="history-item" data-entry-id="${escapeHtml(entry.id)}">
+          <div class="history-meta">${escapeHtml(createdAt)} · ${escapeHtml(entry.status_label)} ${reverted}</div>
+          <p class="history-text">${escapeHtml(entry.instruction)}</p>
+          <div class="history-result">${escapeHtml(entry.result_message)}</div>
+          <div class="history-actions">
+            ${revertForm}
+            <form method="post" action="{{ url_for('admin_delete_training_history') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="entry_id" value="${escapeHtml(entry.id)}">
+              <button class="ghost danger small-button" type="submit">ลบประวัติ</button>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function prependHistoryItem(entry) {
+      const historyList = document.getElementById("history-list");
+      const emptyText = historyList.querySelector(".hint");
+      if (emptyText) emptyText.remove();
+      const existing = historyList.querySelector(`[data-entry-id="${entry.id}"]`);
+      if (existing) existing.remove();
+      historyList.insertAdjacentHTML("afterbegin", renderHistoryItem(entry));
     }
 
     trainForm.addEventListener("submit", (event) => {
+      event.preventDefault();
       const text = instruction.value.trim();
       if (!text) {
-        event.preventDefault();
         instruction.focus();
         return;
       }
       appendTemporaryBubble("user", text);
-      appendTemporaryBubble("bot", "กำลังเทรนน้องก้านอยู่ค่ะ รอสักครู่นะคะ...");
+      const loadingBubble = appendTemporaryBubble("bot", "กำลังเทรนน้องก้านอยู่ค่ะ รอสักครู่นะคะ...");
       trainButton.disabled = true;
       trainButton.textContent = "กำลังเทรน...";
       instruction.value = "";
+
+      const formData = new FormData(trainForm);
+      formData.set("instruction", text);
+
+      fetch(trainForm.action, {
+        method: "POST",
+        body: formData,
+        headers: { "X-Requested-With": "fetch" }
+      })
+        .then(async (response) => {
+          const data = await response.json();
+          if (!response.ok) {
+            throw data;
+          }
+          return data;
+        })
+        .then((data) => {
+          loadingBubble.textContent = data.message;
+          if (data.entry) prependHistoryItem(data.entry);
+          if (data.knowledge_text) {
+            const editor = document.querySelector(".json-editor");
+            if (editor) editor.value = data.knowledge_text;
+          }
+        })
+        .catch((error) => {
+          const message = error && error.message ? error.message : "เทรนไม่สำเร็จค่ะ ลองกดส่งใหม่อีกครั้งนะคะ";
+          loadingBubble.textContent = message;
+          if (error && error.entry) prependHistoryItem(error.entry);
+        })
+        .finally(() => {
+          trainButton.disabled = false;
+          trainButton.textContent = "ส่งไปเทรน";
+        });
     });
 
     document.querySelectorAll("[data-example]").forEach((button) => {
