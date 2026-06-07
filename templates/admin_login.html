@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>เข้าสู่ระบบ | น้องก้าน</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f3ee;
+      --panel: #ffffff;
+      --ink: #201f1d;
+      --muted: #6d685f;
+      --line: #ded8cf;
+      --accent: #23745b;
+      --accent-dark: #15543f;
+      --danger: #b3342f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      width: min(420px, calc(100vw - 32px));
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 28px;
+      box-shadow: 0 18px 48px rgba(41, 34, 25, .08);
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; line-height: 1.15; }
+    p { margin: 0 0 22px; color: var(--muted); line-height: 1.65; }
+    label { display: block; margin: 0 0 8px; font-weight: 700; }
+    input {
+      width: 100%;
+      min-height: 46px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 16px;
+    }
+    button {
+      width: 100%;
+      min-height: 46px;
+      margin-top: 16px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--accent);
+      color: white;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    button:hover { background: var(--accent-dark); }
+    .error {
+      margin: 0 0 16px;
+      color: var(--danger);
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>น้องก้าน Admin</h1>
+    <p>เข้าสู่ระบบเพื่อแก้ฐานความรู้และทดสอบคำตอบของบอต</p>
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="{{ url_for('admin_login') }}">
+      <label for="password">รหัสผ่าน</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+      <button type="submit">เข้าสู่ระบบ</button>
+    </form>
+  </main>
+</body>
+</html>
