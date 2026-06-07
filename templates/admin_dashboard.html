@@ -301,7 +301,7 @@
             <textarea id="instruction" name="instruction" placeholder="ตัวอย่าง: เพิ่มสินค้า กระถางแคคตัสจิ๋ว ราคา 159 บาท มีสีขาวและเขียว จัดส่ง Kerry 2-3 วัน"></textarea>
           </div>
           <div class="actions">
-            <button type="submit">ส่งไปเทรน</button>
+            <button type="submit" id="train-submit">ส่งไปเทรน</button>
           </div>
         </form>
 
@@ -357,7 +357,31 @@
   <script>
     const instruction = document.getElementById("instruction");
     const chatWindow = document.getElementById("chat-window");
+    const trainForm = instruction.closest("form");
+    const trainButton = document.getElementById("train-submit");
     chatWindow.scrollTop = chatWindow.scrollHeight;
+
+    function appendTemporaryBubble(role, text) {
+      const bubble = document.createElement("div");
+      bubble.className = `bubble ${role}`;
+      bubble.textContent = text;
+      chatWindow.appendChild(bubble);
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+
+    trainForm.addEventListener("submit", (event) => {
+      const text = instruction.value.trim();
+      if (!text) {
+        event.preventDefault();
+        instruction.focus();
+        return;
+      }
+      appendTemporaryBubble("user", text);
+      appendTemporaryBubble("bot", "กำลังเทรนน้องก้านอยู่ค่ะ รอสักครู่นะคะ...");
+      trainButton.disabled = true;
+      trainButton.textContent = "กำลังเทรน...";
+      instruction.value = "";
+    });
 
     document.querySelectorAll("[data-example]").forEach((button) => {
       button.addEventListener("click", () => {

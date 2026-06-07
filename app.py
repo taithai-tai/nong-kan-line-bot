@@ -41,6 +41,7 @@ APP_URL = os.getenv("APP_URL", "")
 
 KNOWLEDGE_BASE_PATH = Path(os.getenv("KNOWLEDGE_BASE_PATH", "knowledge_base.json"))
 AI_TIMEOUT_SECONDS = int(os.getenv("AI_TIMEOUT_SECONDS", "20"))
+AI_TRAINING_TIMEOUT_SECONDS = int(os.getenv("AI_TRAINING_TIMEOUT_SECONDS", "45"))
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
 FALLBACK_MESSAGE = (
@@ -158,7 +159,7 @@ def train_knowledge_base_with_ai(instruction: str) -> tuple[Optional[dict], str]
             {"role": "user", "content": instruction},
         ],
         "temperature": 0.1,
-        "max_tokens": 2200,
+        "max_tokens": 1600,
     }
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -173,7 +174,7 @@ def train_knowledge_base_with_ai(instruction: str) -> tuple[Optional[dict], str]
             f"{AI_API_BASE_URL}/chat/completions",
             headers=headers,
             json=payload,
-            timeout=AI_TIMEOUT_SECONDS,
+            timeout=(10, AI_TRAINING_TIMEOUT_SECONDS),
         )
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
