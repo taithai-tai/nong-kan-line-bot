@@ -198,6 +198,54 @@
       align-items: center;
       flex-wrap: wrap;
     }
+    .history-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .history-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fffdf9;
+      display: grid;
+      gap: 8px;
+    }
+    .history-meta {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .history-text {
+      margin: 0;
+      line-height: 1.65;
+      white-space: pre-wrap;
+    }
+    .history-result {
+      color: #16573f;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .history-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .small-button {
+      min-height: 34px;
+      padding: 0 10px;
+      font-size: 13px;
+    }
+    .danger {
+      color: #b3342f;
+      border-color: #e3b8b3;
+    }
+    .danger:hover { background: #fff1ef; }
+    .warning {
+      color: #8a5600;
+      border-color: #dfc48a;
+    }
+    .warning:hover { background: #fff6df; }
     details {
       margin-top: 18px;
       border: 1px solid var(--line);
@@ -277,10 +325,10 @@
 
       <div class="chat-panel">
         <div class="chat-tools">
-          <p class="hint">แชทนี้เก็บเฉพาะประวัติล่าสุดบนหน้า Admin ส่วนข้อมูลจริงจะบันทึกลงฐานความรู้</p>
+          <p class="hint">แชทนี้เก็บเฉพาะประวัติล่าสุดบนหน้า Admin ส่วนประวัติการเทรนจริงอยู่ด้านล่าง</p>
           <form method="post" action="{{ url_for('admin_clear_train_messages') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button class="ghost" type="submit">ล้างแชท</button>
+            <button class="ghost" type="submit">ล้างประวัติทั้งหมด</button>
           </form>
         </div>
 
@@ -326,6 +374,41 @@
             <a class="link-button ghost" href="{{ url_for('health_check') }}" target="_blank" rel="noreferrer">เช็กสถานะบอต</a>
           </div>
         </form>
+      </details>
+
+      <details open>
+        <summary>ประวัติการเทรน</summary>
+        <div class="history-list">
+          {% if training_history %}
+            {% for entry in training_history %}
+              <div class="history-item">
+                <div class="history-meta">
+                  {{ entry.created_at[:19].replace('T', ' ') if entry.created_at else '' }}
+                  · {{ 'สำเร็จ' if entry.status == 'success' else 'ไม่สำเร็จ' }}
+                  {% if entry.reverted %}· ย้อนกลับแล้ว{% endif %}
+                </div>
+                <p class="history-text">{{ entry.instruction }}</p>
+                <div class="history-result">{{ entry.result_message }}</div>
+                <div class="history-actions">
+                  {% if entry.status == 'success' and not entry.reverted %}
+                    <form method="post" action="{{ url_for('admin_revert_training_history') }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                      <input type="hidden" name="entry_id" value="{{ entry.id }}">
+                      <button class="ghost warning small-button" type="submit">ย้อนก่อนรายการนี้</button>
+                    </form>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('admin_delete_training_history') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="entry_id" value="{{ entry.id }}">
+                    <button class="ghost danger small-button" type="submit">ลบประวัติ</button>
+                  </form>
+                </div>
+              </div>
+            {% endfor %}
+          {% else %}
+            <p class="hint">ยังไม่มีประวัติการเทรนค่ะ</p>
+          {% endif %}
+        </div>
       </details>
     </section>
 

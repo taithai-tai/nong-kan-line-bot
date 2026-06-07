@@ -5,6 +5,8 @@ import json
 import logging
 import os
 import secrets
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -40,6 +42,7 @@ APP_NAME = os.getenv("APP_NAME", "nong-kan-line-bot")
 APP_URL = os.getenv("APP_URL", "")
 
 KNOWLEDGE_BASE_PATH = Path(os.getenv("KNOWLEDGE_BASE_PATH", "knowledge_base.json"))
+TRAINING_HISTORY_PATH = Path(os.getenv("TRAINING_HISTORY_PATH", "training_history.json"))
 AI_TIMEOUT_SECONDS = int(os.getenv("AI_TIMEOUT_SECONDS", "20"))
 AI_TRAINING_TIMEOUT_SECONDS = int(os.getenv("AI_TRAINING_TIMEOUT_SECONDS", "45"))
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
@@ -78,12 +81,6 @@ def secure_text_equal(left: str, right: str) -> bool:
     return hmac.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
 
 
-def append_train_message(role: str, text: str) -> None:
-    messages = list(session.get("train_messages", []))
-    messages.append({"role": role, "text": text})
-    session["train_messages"] = messages[-12:]
-
-
 def verify_csrf_token() -> None:
     token = request.form.get("csrf_token", "")
     if not hmac.compare_digest(token, session.get("csrf_token", "")):
@@ -105,6 +102,87 @@ def load_knowledge_base() -> dict:
 def save_knowledge_base(knowledge_base: dict) -> None:
     formatted_json = json.dumps(knowledge_base, ensure_ascii=False, indent=2)
     KNOWLEDGE_BASE_PATH.write_text(formatted_json + "\n", encoding="utf-8")
+
+
+def load_training_history() -> list[dict]:
+    if not TRAINING_HISTORY_PATH.exists():
+        return []
+
+    try:
+        history = json.loads(TRAINING_HISTORY_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        logger.exception("Training history JSON is invalid.")
+        return []
+
+    return history if isinstance(history, list) else []
+
+
+def save_training_history(history: list[dict]) -> None:
+    formatted_json = json.dumps(history, ensure_ascii=False, indent=2)
+    TRAINING_HISTORY_PATH.write_text(formatted_json + "\n", encoding="utf-8")
+
+
+def add_training_history_entry(
+    *,
+    instruction: str,
+    result_message: str,
+    status: str,
+    before_snapshot: Optional[dict] = None,
+    after_snapshot: Optional[dict] = None,
+) -> dict:
+    history = load_training_history()
+    entry = {
+        "id": uuid.uuid4().hex,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "instruction": instruction,
+        "result_message": result_message,
+        "status": status,
+        "before_snapshot": before_snapshot,
+        "after_snapshot": after_snapshot,
+        "reverted": False,
+    }
+    history.append(entry)
+    save_training_history(history[-80:])
+    return entry
+
+
+def training_history_to_messages(history: list[dict]) -> list[dict]:
+    messages = []
+    for entry in history[-12:]:
+        instruction = entry.get("instruction", "")
+        result_message = entry.get("result_message", "")
+        if instruction:
+            messages.append({"role": "user", "text": instruction})
+        if result_message:
+            messages.append({"role": "bot", "text": result_message})
+    return messages
+
+
+def delete_training_history_entry(entry_id: str) -> bool:
+    history = load_training_history()
+    next_history = [entry for entry in history if entry.get("id") != entry_id]
+    if len(next_history) == len(history):
+        return False
+    save_training_history(next_history)
+    return True
+
+
+def revert_training_history_entry(entry_id: str) -> bool:
+    history = load_training_history()
+    for entry in history:
+        if entry.get("id") != entry_id:
+            continue
+
+        before_snapshot = entry.get("before_snapshot")
+        if not isinstance(before_snapshot, dict):
+            return False
+
+        save_knowledge_base(before_snapshot)
+        entry["reverted"] = True
+        entry["reverted_at"] = datetime.now(timezone.utc).isoformat()
+        save_training_history(history)
+        return True
+    return False
 
 
 def extract_json_object(text: str) -> dict:
@@ -404,6 +482,7 @@ def render_admin_dashboard(
         if knowledge_base is None:
             knowledge_base = load_knowledge_base()
         raw_knowledge_text = json.dumps(knowledge_base, ensure_ascii=False, indent=2)
+    training_history = load_training_history()
 
     return render_template(
         "admin_dashboard.html",
@@ -418,9 +497,10 @@ def render_admin_dashboard(
         knowledge_path=str(KNOWLEDGE_BASE_PATH),
         knowledge_text=raw_knowledge_text,
         message=message,
+        training_history=list(reversed(training_history)),
         test_answer=test_answer,
         test_question=test_question,
-        train_messages=train_messages if train_messages is not None else session.get("train_messages", []),
+        train_messages=train_messages if train_messages is not None else training_history_to_messages(training_history),
     ), status_code
 
 
@@ -462,16 +542,28 @@ def admin_train_knowledge_base():
             status_code=400,
         )
 
-    append_train_message("user", instruction)
+    before_knowledge_base = load_knowledge_base()
     updated_knowledge_base, result_message = train_knowledge_base_with_ai(instruction)
-    append_train_message("bot", result_message)
     if updated_knowledge_base is None:
+        add_training_history_entry(
+            instruction=instruction,
+            result_message=result_message,
+            status="failed",
+            before_snapshot=before_knowledge_base,
+        )
         return render_admin_dashboard(
             message=result_message,
             status_code=502,
         )
 
     save_knowledge_base(updated_knowledge_base)
+    add_training_history_entry(
+        instruction=instruction,
+        result_message=result_message,
+        status="success",
+        before_snapshot=before_knowledge_base,
+        after_snapshot=updated_knowledge_base,
+    )
     return render_admin_dashboard(
         message=result_message,
         knowledge_base=updated_knowledge_base,
@@ -483,8 +575,30 @@ def admin_clear_train_messages():
     require_admin()
     verify_csrf_token()
 
-    session["train_messages"] = []
-    return redirect(url_for("admin_dashboard", message="ล้างแชทเทรนเรียบร้อยค่ะ"))
+    save_training_history([])
+    return redirect(url_for("admin_dashboard", message="ล้างประวัติการเทรนเรียบร้อยค่ะ"))
+
+
+@app.post("/admin/history/delete")
+def admin_delete_training_history():
+    require_admin()
+    verify_csrf_token()
+
+    entry_id = request.form.get("entry_id", "")
+    if delete_training_history_entry(entry_id):
+        return redirect(url_for("admin_dashboard", message="ลบรายการออกจากประวัติแล้วค่ะ"))
+    return redirect(url_for("admin_dashboard", message="ไม่พบรายการประวัติที่ต้องการลบค่ะ"))
+
+
+@app.post("/admin/history/revert")
+def admin_revert_training_history():
+    require_admin()
+    verify_csrf_token()
+
+    entry_id = request.form.get("entry_id", "")
+    if revert_training_history_entry(entry_id):
+        return redirect(url_for("admin_dashboard", message="ย้อนฐานความรู้กลับก่อนรายการนี้แล้วค่ะ"))
+    return redirect(url_for("admin_dashboard", message="ย้อนรายการนี้ไม่ได้ค่ะ"))
 
 
 @app.post("/admin/test")

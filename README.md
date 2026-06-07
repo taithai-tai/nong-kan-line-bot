@@ -15,6 +15,7 @@
 ├── runtime.txt
 ├── templates/
 ├── knowledge_base.json
+├── training_history.json
 ├── .env.example
 ├── .gitignore
 └── README.md
@@ -58,6 +59,7 @@ OPENROUTER_API_KEY=your_openrouter_api_key
 AI_API_BASE_URL=https://openrouter.ai/api/v1
 AI_MODEL=openrouter/auto
 APP_URL=http://localhost:5000
+TRAINING_HISTORY_PATH=training_history.json
 ADMIN_PASSWORD=change_this_to_a_strong_password
 SECRET_KEY=change_this_to_a_long_random_secret
 ```
