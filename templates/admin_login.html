@@ -45,6 +45,12 @@
       padding: 10px 12px;
       font-size: 16px;
     }
+    .password-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: stretch;
+    }
     button {
       width: 100%;
       min-height: 46px;
@@ -58,6 +64,16 @@
       cursor: pointer;
     }
     button:hover { background: var(--accent-dark); }
+    .toggle-password {
+      width: auto;
+      min-width: 86px;
+      margin-top: 0;
+      border: 1px solid var(--line);
+      background: #f2eee7;
+      color: var(--ink);
+      font-size: 14px;
+    }
+    .toggle-password:hover { background: #e8dfd2; }
     .error {
       margin: 0 0 16px;
       color: var(--danger);
@@ -74,9 +90,24 @@
     {% endif %}
     <form method="post" action="{{ url_for('admin_login') }}">
       <label for="password">รหัสผ่าน</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+      <div class="password-row">
+        <input id="password" name="password" type="password" autocomplete="current-password" inputmode="text" required autofocus>
+        <button class="toggle-password" type="button" id="toggle-password" aria-controls="password" aria-pressed="false">แสดง</button>
+      </div>
       <button type="submit">เข้าสู่ระบบ</button>
     </form>
   </main>
+  <script>
+    const passwordInput = document.getElementById("password");
+    const toggleButton = document.getElementById("toggle-password");
+
+    toggleButton.addEventListener("click", () => {
+      const shouldShow = passwordInput.type === "password";
+      passwordInput.type = shouldShow ? "text" : "password";
+      toggleButton.textContent = shouldShow ? "ซ่อน" : "แสดง";
+      toggleButton.setAttribute("aria-pressed", String(shouldShow));
+      passwordInput.focus();
+    });
+  </script>
 </body>
 </html>
