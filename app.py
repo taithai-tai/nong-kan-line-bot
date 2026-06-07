@@ -77,6 +77,12 @@ def secure_text_equal(left: str, right: str) -> bool:
     return hmac.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
 
 
+def append_train_message(role: str, text: str) -> None:
+    messages = list(session.get("train_messages", []))
+    messages.append({"role": role, "text": text})
+    session["train_messages"] = messages[-12:]
+
+
 def verify_csrf_token() -> None:
     token = request.form.get("csrf_token", "")
     if not hmac.compare_digest(token, session.get("csrf_token", "")):
@@ -389,8 +395,7 @@ def render_admin_dashboard(
     status_code: int = 200,
     test_answer: str = "",
     test_question: str = "",
-    train_instruction: str = "",
-    train_result: str = "",
+    train_messages: Optional[list[dict]] = None,
     knowledge_base: Optional[dict] = None,
     raw_knowledge_text: Optional[str] = None,
 ):
@@ -414,8 +419,7 @@ def render_admin_dashboard(
         message=message,
         test_answer=test_answer,
         test_question=test_question,
-        train_instruction=train_instruction,
-        train_result=train_result,
+        train_messages=train_messages if train_messages is not None else session.get("train_messages", []),
     ), status_code
 
 
@@ -457,12 +461,12 @@ def admin_train_knowledge_base():
             status_code=400,
         )
 
+    append_train_message("user", instruction)
     updated_knowledge_base, result_message = train_knowledge_base_with_ai(instruction)
+    append_train_message("bot", result_message)
     if updated_knowledge_base is None:
         return render_admin_dashboard(
             message=result_message,
-            train_instruction=instruction,
-            train_result=result_message,
             status_code=502,
         )
 
@@ -470,9 +474,16 @@ def admin_train_knowledge_base():
     return render_admin_dashboard(
         message=result_message,
         knowledge_base=updated_knowledge_base,
-        train_instruction=instruction,
-        train_result=result_message,
     )
+
+
+@app.post("/admin/train/clear")
+def admin_clear_train_messages():
+    require_admin()
+    verify_csrf_token()
+
+    session["train_messages"] = []
+    return redirect(url_for("admin_dashboard", message="ล้างแชทเทรนเรียบร้อยค่ะ"))
 
 
 @app.post("/admin/test")

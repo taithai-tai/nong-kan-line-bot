@@ -82,7 +82,7 @@
       font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     textarea {
-      min-height: 190px;
+      min-height: 88px;
       resize: vertical;
     }
     input { min-height: 44px; }
@@ -133,19 +133,50 @@
       display: grid;
       gap: 14px;
     }
+    .chat-window {
+      min-height: 360px;
+      max-height: 58vh;
+      overflow-y: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fffdf9;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
     .bubble {
+      max-width: 86%;
       border-radius: 8px;
       padding: 14px;
       line-height: 1.7;
       white-space: pre-wrap;
     }
     .bubble.user {
-      background: #fffdf9;
-      border: 1px solid var(--line);
+      align-self: flex-end;
+      background: var(--accent);
+      color: white;
     }
     .bubble.bot {
+      align-self: flex-start;
       background: var(--bubble);
       color: #16573f;
+    }
+    .composer {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fffdf9;
+    }
+    .composer textarea {
+      min-height: 82px;
+      border: 0;
+      border-radius: 0;
+      padding: 0;
+      background: transparent;
+    }
+    .composer textarea:focus {
+      outline: none;
     }
     .examples {
       display: grid;
@@ -159,6 +190,13 @@
       text-align: left;
       white-space: normal;
       font-size: 13px;
+    }
+    .chat-tools {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
     }
     details {
       margin-top: 18px;
@@ -238,21 +276,32 @@
       {% endif %}
 
       <div class="chat-panel">
-        {% if train_instruction %}
-          <div class="bubble user">{{ train_instruction }}</div>
-        {% endif %}
-        {% if train_result %}
-          <div class="bubble bot">{{ train_result }}</div>
-        {% else %}
-          <div class="bubble bot">พิมพ์สิ่งที่อยากให้น้องก้านรู้ เช่น สินค้า ราคา โปรโมชัน วิธีสั่งซื้อ หรือเงื่อนไขจัดส่ง แล้วกดเทรนได้เลยค่ะ</div>
-        {% endif %}
+        <div class="chat-tools">
+          <p class="hint">แชทนี้เก็บเฉพาะประวัติล่าสุดบนหน้า Admin ส่วนข้อมูลจริงจะบันทึกลงฐานความรู้</p>
+          <form method="post" action="{{ url_for('admin_clear_train_messages') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="ghost" type="submit">ล้างแชท</button>
+          </form>
+        </div>
+
+        <div class="chat-window" id="chat-window" aria-live="polite">
+          {% if train_messages %}
+            {% for item in train_messages %}
+              <div class="bubble {{ item.role }}">{{ item.text }}</div>
+            {% endfor %}
+          {% else %}
+            <div class="bubble bot">พิมพ์สิ่งที่อยากให้น้องก้านรู้ เช่น สินค้า ราคา โปรโมชัน วิธีสั่งซื้อ หรือเงื่อนไขจัดส่ง แล้วกดเทรนได้เลยค่ะ</div>
+          {% endif %}
+        </div>
 
         <form method="post" action="{{ url_for('admin_train_knowledge_base') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <label for="instruction">ข้อความที่ต้องการสอน</label>
-          <textarea id="instruction" name="instruction" placeholder="ตัวอย่าง: เพิ่มสินค้า กระถางแคคตัสจิ๋ว ราคา 159 บาท มีสีขาวและเขียว จัดส่ง Kerry 2-3 วัน">{{ train_instruction }}</textarea>
+          <label for="instruction">พิมพ์ข้อความสอนน้องก้าน</label>
+          <div class="composer">
+            <textarea id="instruction" name="instruction" placeholder="ตัวอย่าง: เพิ่มสินค้า กระถางแคคตัสจิ๋ว ราคา 159 บาท มีสีขาวและเขียว จัดส่ง Kerry 2-3 วัน"></textarea>
+          </div>
           <div class="actions">
-            <button type="submit">เทรนน้องก้าน</button>
+            <button type="submit">ส่งไปเทรน</button>
           </div>
         </form>
 
@@ -307,6 +356,9 @@
 
   <script>
     const instruction = document.getElementById("instruction");
+    const chatWindow = document.getElementById("chat-window");
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+
     document.querySelectorAll("[data-example]").forEach((button) => {
       button.addEventListener("click", () => {
         instruction.value = button.dataset.example;
