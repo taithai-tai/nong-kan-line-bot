@@ -61,6 +61,7 @@ OPENROUTER_API_KEY=your_openrouter_api_key
 AI_API_BASE_URL=https://openrouter.ai/api/v1
 AI_MODEL=openrouter/auto
 APP_URL=http://localhost:5000
+DATA_DIR=.
 TRAINING_HISTORY_PATH=training_history.json
 CUSTOMER_CHATS_PATH=customer_chats.json
 CUSTOMER_AI_SETTINGS_PATH=customer_ai_settings.json
@@ -147,15 +148,17 @@ AI_API_BASE_URL=https://openrouter.ai/api/v1
 AI_MODEL=openrouter/auto
 APP_NAME=nong-kan-line-bot
 APP_URL=https://your-railway-domain.up.railway.app
+DATA_DIR=/data
 ADMIN_PASSWORD=change_this_to_a_strong_password
 SECRET_KEY=change_this_to_a_long_random_secret
 AI_TIMEOUT_SECONDS=20
 LOG_LEVEL=INFO
 ```
 
-8. Deploy
-9. เปิด public domain ของ Railway
-10. ทดสอบ health check ที่:
+8. สร้าง Railway Volume แล้ว mount ที่ `/data` เพื่อเก็บแชทลูกค้า ประวัติเทรน และฐานความรู้ที่แก้จากหน้า Admin ให้ไม่หายตอน redeploy
+9. Deploy
+10. เปิด public domain ของ Railway
+11. ทดสอบ health check ที่:
 
 ```text
 https://your-railway-domain.up.railway.app/
@@ -180,7 +183,7 @@ https://your-railway-domain.up.railway.app/admin
 
 ค่า secrets เช่น `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, `OPENROUTER_API_KEY`, `AI_MODEL` และ `SECRET_KEY` ให้แก้ใน Railway Environment Variables ไม่ควรแก้ผ่านหน้าเว็บ
 
-หมายเหตุ: ถ้าใช้งานบน Railway โดยไม่มี volume หรือฐานข้อมูลถาวร ข้อมูลที่แก้ผ่านหน้า Admin อาจหายหลัง redeploy/restart ควรนำ JSON ที่แก้แล้วไปอัปเดตใน GitHub ด้วย
+หมายเหตุ: ถ้าใช้งานบน Railway ให้ตั้ง `DATA_DIR=/data` และต้องมี Railway Volume ที่ mount `/data` ไม่อย่างนั้นข้อมูลแชทที่เก็บเป็นไฟล์ JSON อาจหายหลัง redeploy/restart ได้
 
 ## ตั้ง Webhook URL ใน LINE
 
@@ -232,6 +235,8 @@ AI_MODEL=google/gemini-flash-1.5
 
 - หน้า `แชทลูกค้า` มีปุ่มปิด AI ทั้งระบบ ถ้าปิดไว้และลูกค้าทักมา ระบบจะตอบข้อความมึนหัวให้อัตโนมัติ
 - หน้า `แชทลูกค้า` ดึงข้อมูลใหม่เองแบบเรียลไทม์ และแอดมินส่งข้อความได้โดยไม่ต้องรีเฟรชหน้า
+- แชทที่ปิด AI รายลูกค้าจะถูกปักหมุดไว้บนสุด และในกลุ่มเดียวกันจะเรียงแชทใหม่สุดก่อน
+- ช่องค้นหาในหน้า `แชทลูกค้า` ค้นได้ทั้ง ID ลูกค้าและข้อความที่อยู่ในประวัติแชท
 
 ## การทดสอบสำคัญ
 

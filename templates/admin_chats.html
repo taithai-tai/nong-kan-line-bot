@@ -141,6 +141,15 @@
       align-items: center;
       gap: 10px;
     }
+    .customer-search {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfdfb;
+    }
+    .customer-search input {
+      min-height: 40px;
+      background: #fff;
+    }
     .customer-link {
       display: grid;
       gap: 4px;
@@ -150,6 +159,13 @@
       color: var(--ink);
     }
     .customer-link.active { background: #e7f6ee; }
+    .customer-link.pinned {
+      background: #fff8f0;
+    }
+    .customer-link.pinned.active {
+      background: #e7f6ee;
+      box-shadow: inset 4px 0 0 var(--danger);
+    }
     .customer-link:focus-visible, button:focus-visible, textarea:focus-visible, a:focus-visible {
       outline: 3px solid rgba(6, 199, 85, .35);
       outline-offset: 2px;
@@ -179,6 +195,15 @@
     .ai-chip.off {
       background: #fff0ef;
       color: #b3342f;
+    }
+    .pin-chip {
+      width: fit-content;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-weight: 900;
+      background: #fff0ef;
+      color: var(--danger);
     }
     .chat {
       min-height: 0;
@@ -415,17 +440,22 @@
         <h3>ลูกค้า</h3>
         <span id="customer-count">{{ customers|length }} แชท</span>
       </div>
+      <div class="customer-search">
+        <label class="visually-hidden" for="customer-search-input">ค้นหาแชทลูกค้า</label>
+        <input id="customer-search-input" type="search" value="{{ query or '' }}" placeholder="ค้นหา ID หรือข้อความในแชท">
+      </div>
       <div id="customer-list">
         {% if customers %}
           {% for customer in customers %}
-            <a class="customer-link {{ 'active' if customer.customer_id == selected_customer_id else '' }}" data-customer-id="{{ customer.customer_id }}" href="{{ url_for('admin_customer_chats', customer_id=customer.customer_id) }}">
+            <a class="customer-link {{ 'active' if customer.customer_id == selected_customer_id else '' }} {{ 'pinned' if customer.is_pinned else '' }}" data-customer-id="{{ customer.customer_id }}" href="{{ url_for('admin_customer_chats', customer_id=customer.customer_id, q=query) }}">
               <div class="customer-id">{{ customer.display_name }}</div>
               <div class="last-message">{{ customer.last_message or 'ยังไม่มีข้อความ' }}</div>
               <div class="ai-chip {{ '' if customer.ai_enabled else 'off' }}">{{ 'AI เปิด' if customer.ai_enabled else 'AI ปิด' }}</div>
+              {% if customer.is_pinned %}<div class="pin-chip">ปักหมุด</div>{% endif %}
             </a>
           {% endfor %}
         {% else %}
-          <div class="empty">ยังไม่มีแชทลูกค้า รอให้ลูกค้าทัก LINE OA เข้ามาก่อนค่ะ</div>
+          <div class="empty">ไม่พบแชทที่ตรงกับคำค้นหา</div>
         {% endif %}
       </div>
     </aside>
@@ -518,6 +548,8 @@
       selectedAiEnabled: {{ 'true' if selected_ai_enabled else 'false' }},
       lastMessageFingerprint: "",
       isSending: false,
+      searchQuery: "{{ query or '' }}",
+      searchTimer: null,
     };
 
     const body = document.body;
@@ -525,6 +557,7 @@
     const liveStatus = document.getElementById("live-status");
     const customerCount = document.getElementById("customer-count");
     const customerList = document.getElementById("customer-list");
+    const customerSearchInput = document.getElementById("customer-search-input");
     const chatTitle = document.getElementById("chat-title");
     const chatSubtitle = document.getElementById("chat-subtitle");
     const offlineBanner = document.getElementById("offline-banner");
@@ -592,19 +625,22 @@
     function renderCustomers(customers) {
       customerCount.textContent = `${customers.length} แชท`;
       if (!customers.length) {
-        customerList.innerHTML = '<div class="empty">ยังไม่มีแชทลูกค้า รอให้ลูกค้าทัก LINE OA เข้ามาก่อนค่ะ</div>';
+        customerList.innerHTML = state.searchQuery
+          ? '<div class="empty">ไม่พบแชทที่ตรงกับคำค้นหา</div>'
+          : '<div class="empty">ยังไม่มีแชทลูกค้า รอให้ลูกค้าทัก LINE OA เข้ามาก่อนค่ะ</div>';
         return;
       }
       customerList.innerHTML = "";
       customers.forEach((customer) => {
         const link = document.createElement("a");
-        link.className = `customer-link ${customer.customer_id === state.selectedCustomerId ? "active" : ""}`;
-        link.href = `${endpoints.chats}?customer_id=${encodeURIComponent(customer.customer_id)}`;
+        link.className = `customer-link ${customer.customer_id === state.selectedCustomerId ? "active" : ""} ${customer.is_pinned ? "pinned" : ""}`;
+        link.href = `${endpoints.chats}?customer_id=${encodeURIComponent(customer.customer_id)}&q=${encodeURIComponent(state.searchQuery)}`;
         link.dataset.customerId = customer.customer_id;
         link.innerHTML = `
           <div class="customer-id"></div>
           <div class="last-message"></div>
           <div class="ai-chip ${customer.ai_enabled ? "" : "off"}">${customer.ai_enabled ? "AI เปิด" : "AI ปิด"}</div>
+          ${customer.is_pinned ? '<div class="pin-chip">ปักหมุด</div>' : ''}
         `;
         link.querySelector(".customer-id").textContent = customer.display_name || customer.customer_id;
         link.querySelector(".last-message").textContent = customer.last_message || "ยังไม่มีข้อความ";
@@ -655,7 +691,7 @@
     }
 
     function fetchChatData() {
-      const url = `${endpoints.data}?customer_id=${encodeURIComponent(state.selectedCustomerId || "")}`;
+      const url = `${endpoints.data}?customer_id=${encodeURIComponent(state.selectedCustomerId || "")}&q=${encodeURIComponent(state.searchQuery)}`;
       return fetch(url)
         .then((response) => response.json())
         .then(applyChatData)
@@ -667,8 +703,19 @@
     function selectCustomer(customerId) {
       state.selectedCustomerId = customerId;
       state.lastMessageFingerprint = "";
-      history.replaceState(null, "", `${endpoints.chats}?customer_id=${encodeURIComponent(customerId)}`);
+      history.replaceState(null, "", `${endpoints.chats}?customer_id=${encodeURIComponent(customerId)}&q=${encodeURIComponent(state.searchQuery)}`);
       setMobilePanel("chat");
+      fetchChatData();
+    }
+
+    function updateSearch(query) {
+      state.searchQuery = query.trim();
+      state.lastMessageFingerprint = "";
+      history.replaceState(
+        null,
+        "",
+        `${endpoints.chats}?customer_id=${encodeURIComponent(state.selectedCustomerId || "")}&q=${encodeURIComponent(state.searchQuery)}`
+      );
       fetchChatData();
     }
 
@@ -678,6 +725,11 @@
         event.preventDefault();
         selectCustomer(link.dataset.customerId);
       });
+    });
+
+    customerSearchInput.addEventListener("input", () => {
+      clearTimeout(state.searchTimer);
+      state.searchTimer = setTimeout(() => updateSearch(customerSearchInput.value), 250);
     });
 
     globalAiForm.addEventListener("submit", (event) => {

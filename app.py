@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import secrets
+import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,10 +43,20 @@ AI_MODEL = os.getenv("AI_MODEL", "openrouter/auto")
 APP_NAME = os.getenv("APP_NAME", "nong-kan-line-bot")
 APP_URL = os.getenv("APP_URL", "")
 
-KNOWLEDGE_BASE_PATH = Path(os.getenv("KNOWLEDGE_BASE_PATH", "knowledge_base.json"))
-TRAINING_HISTORY_PATH = Path(os.getenv("TRAINING_HISTORY_PATH", "training_history.json"))
-CUSTOMER_CHATS_PATH = Path(os.getenv("CUSTOMER_CHATS_PATH", "customer_chats.json"))
-CUSTOMER_AI_SETTINGS_PATH = Path(os.getenv("CUSTOMER_AI_SETTINGS_PATH", "customer_ai_settings.json"))
+DATA_DIR = Path(os.getenv("DATA_DIR", "")).expanduser() if os.getenv("DATA_DIR") else None
+
+
+def resolve_storage_path(env_name: str, default_name: str) -> Path:
+    configured = Path(os.getenv(env_name, default_name)).expanduser()
+    if configured.is_absolute() or DATA_DIR is None:
+        return configured
+    return DATA_DIR / configured
+
+
+KNOWLEDGE_BASE_PATH = resolve_storage_path("KNOWLEDGE_BASE_PATH", "knowledge_base.json")
+TRAINING_HISTORY_PATH = resolve_storage_path("TRAINING_HISTORY_PATH", "training_history.json")
+CUSTOMER_CHATS_PATH = resolve_storage_path("CUSTOMER_CHATS_PATH", "customer_chats.json")
+CUSTOMER_AI_SETTINGS_PATH = resolve_storage_path("CUSTOMER_AI_SETTINGS_PATH", "customer_ai_settings.json")
 AI_TIMEOUT_SECONDS = int(os.getenv("AI_TIMEOUT_SECONDS", "20"))
 AI_TRAINING_TIMEOUT_SECONDS = int(os.getenv("AI_TRAINING_TIMEOUT_SECONDS", "45"))
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
@@ -90,7 +101,15 @@ def verify_csrf_token() -> None:
         abort(400, description="Invalid form token")
 
 
+def bootstrap_storage_file(path: Path, seed_path: Path) -> None:
+    if path.exists() or path == seed_path or not seed_path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(seed_path, path)
+
+
 def load_knowledge_base() -> dict:
+    bootstrap_storage_file(KNOWLEDGE_BASE_PATH, Path("knowledge_base.json"))
     if not KNOWLEDGE_BASE_PATH.exists():
         logger.warning("Knowledge base file not found: %s", KNOWLEDGE_BASE_PATH)
         return {}
@@ -104,7 +123,7 @@ def load_knowledge_base() -> dict:
 
 def save_knowledge_base(knowledge_base: dict) -> None:
     formatted_json = json.dumps(knowledge_base, ensure_ascii=False, indent=2)
-    KNOWLEDGE_BASE_PATH.write_text(formatted_json + "\n", encoding="utf-8")
+    write_text_file_safely(KNOWLEDGE_BASE_PATH, formatted_json + "\n")
 
 
 def utc_now_iso() -> str:
@@ -125,7 +144,17 @@ def load_json_file(path: Path, fallback):
 
 def save_json_file(path: Path, data) -> None:
     formatted_json = json.dumps(data, ensure_ascii=False, indent=2)
-    path.write_text(formatted_json + "\n", encoding="utf-8")
+    write_text_file_safely(path, formatted_json + "\n")
+
+
+def write_text_file_safely(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_suffix(f"{path.suffix}.tmp")
+    backup_path = path.with_suffix(f"{path.suffix}.bak")
+    temp_path.write_text(text, encoding="utf-8")
+    if path.exists():
+        shutil.copyfile(path, backup_path)
+    temp_path.replace(path)
 
 
 def load_customer_chats() -> dict:
@@ -206,23 +235,53 @@ def get_event_customer_id(event: dict) -> str:
 
 def customer_chat_summary(customer_id: str, chat: dict, settings: dict) -> dict:
     messages = chat.get("messages", [])
+    ai_enabled = settings.get(customer_id, {}).get("ai_enabled", True)
     return {
         "customer_id": customer_id,
         "display_name": chat.get("display_name") or customer_id,
         "updated_at": chat.get("updated_at", ""),
         "last_message": messages[-1].get("text", "") if messages else "",
-        "ai_enabled": settings.get(customer_id, {}).get("ai_enabled", True),
+        "ai_enabled": ai_enabled,
+        "is_pinned": not ai_enabled,
     }
 
 
 def public_customer_chat(customer_id: str, chat: dict, settings: dict) -> dict:
+    ai_enabled = settings.get(customer_id, {}).get("ai_enabled", True)
     return {
         "customer_id": customer_id,
         "display_name": chat.get("display_name") or customer_id,
         "updated_at": chat.get("updated_at", ""),
-        "ai_enabled": settings.get(customer_id, {}).get("ai_enabled", True),
+        "ai_enabled": ai_enabled,
+        "is_pinned": not ai_enabled,
         "messages": chat.get("messages", []),
     }
+
+
+def normalize_search_text(text: str) -> str:
+    return " ".join((text or "").casefold().split())
+
+
+def chat_matches_query(customer_id: str, chat: dict, query: str) -> bool:
+    normalized_query = normalize_search_text(query)
+    if not normalized_query:
+        return True
+
+    searchable_parts = [
+        customer_id,
+        chat.get("display_name", ""),
+    ]
+    for message in chat.get("messages", []):
+        searchable_parts.append(message.get("text", ""))
+        searchable_parts.append(message.get("role", ""))
+
+    return normalized_query in normalize_search_text(" ".join(searchable_parts))
+
+
+def sort_customer_summaries(customers: list[dict]) -> list[dict]:
+    customers.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+    customers.sort(key=lambda item: 0 if item.get("is_pinned") else 1)
+    return customers
 
 
 def load_training_history() -> list[dict]:
@@ -927,11 +986,16 @@ def admin_customer_chats():
 
     chats = load_customer_chats()
     settings = load_customer_ai_settings()
+    query = request.args.get("q", "").strip()
     customers = []
     for customer_id, chat in chats.items():
+        if not chat_matches_query(customer_id, chat, query):
+            continue
         customers.append(customer_chat_summary(customer_id, chat, settings))
-    customers.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+    customers = sort_customer_summaries(customers)
     selected_customer_id = request.args.get("customer_id") or (customers[0]["customer_id"] if customers else "")
+    if selected_customer_id and selected_customer_id not in {customer["customer_id"] for customer in customers}:
+        selected_customer_id = customers[0]["customer_id"] if customers else ""
     selected_chat = chats.get(selected_customer_id, {})
     return render_template(
         "admin_chats.html",
@@ -944,6 +1008,7 @@ def admin_customer_chats():
         global_ai_enabled=is_global_ai_enabled(),
         nong_bai_messages=session.get("nong_bai_messages", []),
         message=request.args.get("message", ""),
+        query=query,
     )
 
 
@@ -953,12 +1018,16 @@ def admin_customer_chats_data():
 
     chats = load_customer_chats()
     settings = load_customer_ai_settings()
+    query = request.args.get("q", "").strip()
     customers = [
         customer_chat_summary(customer_id, chat, settings)
         for customer_id, chat in chats.items()
+        if chat_matches_query(customer_id, chat, query)
     ]
-    customers.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+    customers = sort_customer_summaries(customers)
     selected_customer_id = request.args.get("customer_id") or (customers[0]["customer_id"] if customers else "")
+    if selected_customer_id and selected_customer_id not in {customer["customer_id"] for customer in customers}:
+        selected_customer_id = customers[0]["customer_id"] if customers else ""
     selected_chat = public_customer_chat(
         selected_customer_id,
         chats.get(selected_customer_id, {}),
@@ -972,6 +1041,7 @@ def admin_customer_chats_data():
             "selected_chat": selected_chat,
             "selected_ai_enabled": settings.get(selected_customer_id, {}).get("ai_enabled", True),
             "global_ai_enabled": is_global_ai_enabled(),
+            "query": query,
         }
     )
 
