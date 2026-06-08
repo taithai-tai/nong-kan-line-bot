@@ -25,7 +25,7 @@
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     header {
-      height: 64px;
+      min-height: 64px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -60,11 +60,65 @@
       color: var(--danger);
       border-color: #e3b8b3;
     }
+    .mobile-tabs {
+      display: none;
+      gap: 8px;
+      padding: 8px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+    .mobile-tab {
+      flex: 1;
+      background: var(--soft);
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+    .mobile-tab.active {
+      background: var(--line-green);
+      color: #fff;
+      border-color: var(--line-green);
+    }
     .shell {
       height: calc(100vh - 64px);
       display: grid;
       grid-template-columns: 280px minmax(360px, 1fr) 340px;
       min-height: 0;
+    }
+    .global-ai {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fbf9;
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .global-ai.off {
+      background: #fff0ef;
+      color: var(--danger);
+    }
+    .status-line {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .offline-banner {
+      display: none;
+      padding: 9px 12px;
+      background: #fff0ef;
+      color: var(--danger);
+      border-bottom: 1px solid #e3b8b3;
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .offline-banner.show {
+      display: block;
     }
     .customers, .assistant {
       min-height: 0;
@@ -96,6 +150,10 @@
       color: var(--ink);
     }
     .customer-link.active { background: #e7f6ee; }
+    .customer-link:focus-visible, button:focus-visible, textarea:focus-visible, a:focus-visible {
+      outline: 3px solid rgba(6, 199, 85, .35);
+      outline-offset: 2px;
+    }
     .customer-id {
       font-weight: 900;
       overflow: hidden;
@@ -136,6 +194,13 @@
       justify-content: space-between;
       align-items: center;
       gap: 10px;
+    }
+    .chat-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
     .chat-title {
       min-width: 0;
@@ -243,10 +308,74 @@
       font-size: 13px;
       font-weight: 800;
     }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     @media (max-width: 980px) {
-      .shell { grid-template-columns: 1fr; height: auto; }
-      .customers, .assistant { max-height: none; border: 0; }
-      .chat { min-height: 70vh; }
+      header {
+        height: auto;
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 12px;
+      }
+      header > div:last-child {
+        width: 100%;
+        flex-wrap: wrap;
+      }
+      header form, header a, header button {
+        flex: 1;
+      }
+      .mobile-tabs {
+        display: flex;
+      }
+      .shell {
+        grid-template-columns: 1fr;
+        height: calc(100vh - 151px);
+      }
+      .customers, .chat, .assistant {
+        display: none;
+      }
+      body[data-mobile-panel="customers"] .customers,
+      body[data-mobile-panel="chat"] .chat,
+      body[data-mobile-panel="assistant"] .assistant {
+        display: grid;
+        min-height: 0;
+      }
+      body[data-mobile-panel="customers"] .customers { display: block; }
+      .customers {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .chat { min-height: 0; }
+      .assistant {
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+      .composer form {
+        grid-template-columns: 1fr;
+      }
+      .bubble {
+        max-width: 88%;
+      }
+    }
+    @media (min-width: 981px) and (max-width: 1180px) {
+      .shell {
+        grid-template-columns: 240px minmax(360px, 1fr);
+      }
+      .assistant {
+        grid-column: 1 / -1;
+        min-height: 420px;
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
     }
   </style>
 </head>
@@ -254,9 +383,18 @@
   <header>
     <div>
       <h1>แชทลูกค้า</h1>
+      <p class="status-line" id="live-status">กำลังเชื่อมต่อข้อมูลแชทแบบเรียลไทม์</p>
       {% if message %}<p class="message">{{ message }}</p>{% endif %}
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
+      <form id="global-ai-form" method="post" action="{{ url_for('admin_toggle_global_ai') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
+        <input type="hidden" name="enabled" value="{{ 'false' if global_ai_enabled else 'true' }}">
+        <button class="global-ai {{ '' if global_ai_enabled else 'off' }}" type="submit" id="global-ai-button">
+          {{ 'น้องก้านออนไลน์ · ปิด AI ทั้งระบบ' if global_ai_enabled else 'น้องก้านออฟไลน์ · เปิด AI ทั้งระบบ' }}
+        </button>
+      </form>
       <a class="link-button ghost" href="{{ url_for('admin_dashboard') }}">กลับหน้าเทรน</a>
       <form method="post" action="{{ url_for('admin_logout') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -265,58 +403,72 @@
     </div>
   </header>
 
+  <nav class="mobile-tabs" aria-label="สลับหน้าต่างแอดมิน">
+    <button class="mobile-tab active" type="button" data-panel="customers">ลูกค้า</button>
+    <button class="mobile-tab" type="button" data-panel="chat">แชท</button>
+    <button class="mobile-tab" type="button" data-panel="assistant">น้องใบ</button>
+  </nav>
+
   <div class="shell">
-    <aside class="customers">
+    <aside class="customers" id="customers-pane">
       <div class="section-head">
         <h3>ลูกค้า</h3>
-        <span>{{ customers|length }} แชท</span>
+        <span id="customer-count">{{ customers|length }} แชท</span>
       </div>
-      {% if customers %}
-        {% for customer in customers %}
-          <a class="customer-link {{ 'active' if customer.customer_id == selected_customer_id else '' }}" href="{{ url_for('admin_customer_chats', customer_id=customer.customer_id) }}">
-            <div class="customer-id">{{ customer.display_name }}</div>
-            <div class="last-message">{{ customer.last_message or 'ยังไม่มีข้อความ' }}</div>
-            <div class="ai-chip {{ '' if customer.ai_enabled else 'off' }}">{{ 'AI เปิด' if customer.ai_enabled else 'AI ปิด' }}</div>
-          </a>
-        {% endfor %}
-      {% else %}
-        <div class="empty">ยังไม่มีแชทลูกค้า รอให้ลูกค้าทัก LINE OA เข้ามาก่อนค่ะ</div>
-      {% endif %}
+      <div id="customer-list">
+        {% if customers %}
+          {% for customer in customers %}
+            <a class="customer-link {{ 'active' if customer.customer_id == selected_customer_id else '' }}" data-customer-id="{{ customer.customer_id }}" href="{{ url_for('admin_customer_chats', customer_id=customer.customer_id) }}">
+              <div class="customer-id">{{ customer.display_name }}</div>
+              <div class="last-message">{{ customer.last_message or 'ยังไม่มีข้อความ' }}</div>
+              <div class="ai-chip {{ '' if customer.ai_enabled else 'off' }}">{{ 'AI เปิด' if customer.ai_enabled else 'AI ปิด' }}</div>
+            </a>
+          {% endfor %}
+        {% else %}
+          <div class="empty">ยังไม่มีแชทลูกค้า รอให้ลูกค้าทัก LINE OA เข้ามาก่อนค่ะ</div>
+        {% endif %}
+      </div>
     </aside>
 
     <main class="chat">
-      {% if selected_customer_id %}
-        <div class="chat-head">
-          <div class="chat-title">
-            <h2>{{ selected_customer_id }}</h2>
-            <p>{{ 'น้องก้านตอบอัตโนมัติอยู่' if selected_ai_enabled else 'ปิด AI แล้ว แอดมินตอบเอง' }}</p>
-          </div>
-          <form method="post" action="{{ url_for('admin_toggle_customer_ai') }}">
+      <div class="chat-head">
+        <div class="chat-title">
+          <h2 id="chat-title">{{ selected_customer_id or 'ยังไม่ได้เลือกแชท' }}</h2>
+          <p id="chat-subtitle">{{ 'น้องก้านตอบอัตโนมัติอยู่' if selected_ai_enabled and selected_customer_id else 'เลือกแชทลูกค้าจากฝั่งซ้าย' }}</p>
+        </div>
+        <div class="chat-actions">
+          <form method="post" action="{{ url_for('admin_toggle_customer_ai') }}" id="customer-ai-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
             <input type="hidden" name="enabled" value="{{ 'false' if selected_ai_enabled else 'true' }}">
-            <button class="{{ 'danger ghost' if selected_ai_enabled else '' }}" type="submit">{{ 'ปิด AI' if selected_ai_enabled else 'เปิด AI' }}</button>
+            <button class="{{ 'danger ghost' if selected_ai_enabled else '' }}" type="submit" id="customer-ai-button" {% if not selected_customer_id %}disabled{% endif %}>{{ 'ปิด AI' if selected_ai_enabled else 'เปิด AI' }}</button>
           </form>
         </div>
-        <div class="messages" id="customer-messages">
+      </div>
+      <div class="offline-banner {{ '' if global_ai_enabled else 'show' }}" id="offline-banner">
+        น้องก้านออฟไลน์อยู่ ถ้าลูกค้าทักมา ระบบจะส่งข้อความมึนหัวให้อัตโนมัติ
+      </div>
+      <div class="messages" id="customer-messages">
+        {% if selected_customer_id %}
           {% for item in selected_chat.messages or [] %}
             <div class="bubble {{ item.role }}">
               {{ item.text }}
               <div class="bubble-meta">{{ item.role }} · {{ item.created_at[:19].replace('T', ' ') if item.created_at else '' }}</div>
             </div>
           {% endfor %}
-        </div>
-        <div class="composer">
-          <form method="post" action="{{ url_for('admin_send_customer_message') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
-            <textarea name="message" placeholder="พิมพ์ตอบลูกค้าด้วยตัวเอง"></textarea>
-            <button type="submit">ส่ง</button>
-          </form>
-        </div>
-      {% else %}
-        <div class="empty">เลือกแชทลูกค้าจากฝั่งซ้าย</div>
-      {% endif %}
+        {% else %}
+          <div class="empty">เลือกแชทลูกค้าจากฝั่งซ้าย</div>
+        {% endif %}
+      </div>
+      <div class="composer">
+        <form method="post" action="{{ url_for('admin_send_customer_message') }}" id="customer-send-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
+          <label class="visually-hidden" for="customer-message-input">พิมพ์ตอบลูกค้า</label>
+          <textarea name="message" id="customer-message-input" placeholder="พิมพ์ตอบลูกค้าด้วยตัวเอง" {% if not selected_customer_id %}disabled{% endif %}></textarea>
+          <button type="submit" id="customer-send-button" {% if not selected_customer_id %}disabled{% endif %}>ส่ง</button>
+        </form>
+      </div>
     </main>
 
     <aside class="assistant">
@@ -352,8 +504,254 @@
   </div>
 
   <script>
+    const csrfToken = "{{ csrf_token }}";
+    const endpoints = {
+      data: "{{ url_for('admin_customer_chats_data') }}",
+      chats: "{{ url_for('admin_customer_chats') }}",
+      toggleGlobal: "{{ url_for('admin_toggle_global_ai') }}",
+      toggleCustomer: "{{ url_for('admin_toggle_customer_ai') }}",
+      send: "{{ url_for('admin_send_customer_message') }}",
+    };
+    const state = {
+      selectedCustomerId: "{{ selected_customer_id }}",
+      globalAiEnabled: {{ 'true' if global_ai_enabled else 'false' }},
+      selectedAiEnabled: {{ 'true' if selected_ai_enabled else 'false' }},
+      lastMessageFingerprint: "",
+      isSending: false,
+    };
+
+    const body = document.body;
+    body.dataset.mobilePanel = state.selectedCustomerId ? "chat" : "customers";
+    const liveStatus = document.getElementById("live-status");
+    const customerCount = document.getElementById("customer-count");
+    const customerList = document.getElementById("customer-list");
+    const chatTitle = document.getElementById("chat-title");
+    const chatSubtitle = document.getElementById("chat-subtitle");
+    const offlineBanner = document.getElementById("offline-banner");
+    const globalAiForm = document.getElementById("global-ai-form");
+    const globalAiButton = document.getElementById("global-ai-button");
+    const customerAiForm = document.getElementById("customer-ai-form");
+    const customerAiButton = document.getElementById("customer-ai-button");
     const customerMessages = document.getElementById("customer-messages");
-    if (customerMessages) customerMessages.scrollTop = customerMessages.scrollHeight;
+    const customerSendForm = document.getElementById("customer-send-form");
+    const customerInput = document.getElementById("customer-message-input");
+    const customerSendButton = document.getElementById("customer-send-button");
+    const baiCustomerInput = document.querySelector("#nong-bai-form input[name='customer_id']");
+
+    function setMobilePanel(panel) {
+      body.dataset.mobilePanel = panel;
+      document.querySelectorAll(".mobile-tab").forEach((tab) => {
+        tab.classList.toggle("active", tab.dataset.panel === panel);
+      });
+    }
+
+    document.querySelectorAll(".mobile-tab").forEach((tab) => {
+      tab.addEventListener("click", () => setMobilePanel(tab.dataset.panel));
+    });
+    setMobilePanel(body.dataset.mobilePanel);
+
+    function formatTime(value) {
+      if (!value) return "";
+      return value.slice(0, 19).replace("T", " ");
+    }
+
+    function escapeText(value) {
+      return String(value || "");
+    }
+
+    function updateGlobalAi(enabled) {
+      state.globalAiEnabled = Boolean(enabled);
+      globalAiButton.classList.toggle("off", !state.globalAiEnabled);
+      globalAiButton.textContent = state.globalAiEnabled
+        ? "น้องก้านออนไลน์ · ปิด AI ทั้งระบบ"
+        : "น้องก้านออฟไลน์ · เปิด AI ทั้งระบบ";
+      globalAiForm.querySelector("input[name='enabled']").value = state.globalAiEnabled ? "false" : "true";
+      offlineBanner.classList.toggle("show", !state.globalAiEnabled);
+    }
+
+    function updateCustomerControls(customerId, aiEnabled) {
+      state.selectedCustomerId = customerId || "";
+      state.selectedAiEnabled = Boolean(aiEnabled);
+      chatTitle.textContent = state.selectedCustomerId || "ยังไม่ได้เลือกแชท";
+      chatSubtitle.textContent = state.selectedCustomerId
+        ? (state.selectedAiEnabled ? "น้องก้านตอบอัตโนมัติอยู่" : "ปิด AI แล้ว แอดมินตอบเอง")
+        : "เลือกแชทลูกค้าจากฝั่งซ้าย";
+      customerAiForm.querySelector("input[name='customer_id']").value = state.selectedCustomerId;
+      customerAiForm.querySelector("input[name='enabled']").value = state.selectedAiEnabled ? "false" : "true";
+      customerAiButton.disabled = !state.selectedCustomerId;
+      customerAiButton.textContent = state.selectedAiEnabled ? "ปิด AI" : "เปิด AI";
+      customerAiButton.classList.toggle("danger", state.selectedAiEnabled);
+      customerAiButton.classList.toggle("ghost", state.selectedAiEnabled);
+      customerSendForm.querySelector("input[name='customer_id']").value = state.selectedCustomerId;
+      globalAiForm.querySelector("input[name='customer_id']").value = state.selectedCustomerId;
+      if (baiCustomerInput) baiCustomerInput.value = state.selectedCustomerId;
+      customerInput.disabled = !state.selectedCustomerId;
+      customerSendButton.disabled = !state.selectedCustomerId || state.isSending;
+    }
+
+    function renderCustomers(customers) {
+      customerCount.textContent = `${customers.length} แชท`;
+      if (!customers.length) {
+        customerList.innerHTML = '<div class="empty">ยังไม่มีแชทลูกค้า รอให้ลูกค้าทัก LINE OA เข้ามาก่อนค่ะ</div>';
+        return;
+      }
+      customerList.innerHTML = "";
+      customers.forEach((customer) => {
+        const link = document.createElement("a");
+        link.className = `customer-link ${customer.customer_id === state.selectedCustomerId ? "active" : ""}`;
+        link.href = `${endpoints.chats}?customer_id=${encodeURIComponent(customer.customer_id)}`;
+        link.dataset.customerId = customer.customer_id;
+        link.innerHTML = `
+          <div class="customer-id"></div>
+          <div class="last-message"></div>
+          <div class="ai-chip ${customer.ai_enabled ? "" : "off"}">${customer.ai_enabled ? "AI เปิด" : "AI ปิด"}</div>
+        `;
+        link.querySelector(".customer-id").textContent = customer.display_name || customer.customer_id;
+        link.querySelector(".last-message").textContent = customer.last_message || "ยังไม่มีข้อความ";
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          selectCustomer(customer.customer_id);
+        });
+        customerList.appendChild(link);
+      });
+    }
+
+    function renderMessages(messages) {
+      const fingerprint = messages.map((item) => `${item.id || ""}:${item.role}:${item.created_at}`).join("|");
+      if (fingerprint === state.lastMessageFingerprint) return;
+      const shouldStickToBottom = customerMessages.scrollTop + customerMessages.clientHeight >= customerMessages.scrollHeight - 80;
+      state.lastMessageFingerprint = fingerprint;
+      customerMessages.innerHTML = "";
+      if (!state.selectedCustomerId) {
+        customerMessages.innerHTML = '<div class="empty">เลือกแชทลูกค้าจากฝั่งซ้าย</div>';
+        return;
+      }
+      if (!messages.length) {
+        customerMessages.innerHTML = '<div class="empty">แชทนี้ยังไม่มีข้อความ</div>';
+        return;
+      }
+      messages.forEach((item) => {
+        const bubble = document.createElement("div");
+        bubble.className = `bubble ${item.role || ""}`;
+        bubble.textContent = escapeText(item.text);
+        const meta = document.createElement("div");
+        meta.className = "bubble-meta";
+        meta.textContent = `${item.role || "-"} · ${formatTime(item.created_at)}`;
+        bubble.appendChild(meta);
+        customerMessages.appendChild(bubble);
+      });
+      if (shouldStickToBottom) {
+        customerMessages.scrollTop = customerMessages.scrollHeight;
+      }
+    }
+
+    function applyChatData(data) {
+      updateGlobalAi(data.global_ai_enabled);
+      renderCustomers(data.customers || []);
+      const selectedChat = data.selected_chat || {};
+      updateCustomerControls(data.selected_customer_id || "", data.selected_ai_enabled);
+      renderMessages(selectedChat.messages || []);
+      liveStatus.textContent = "ข้อมูลแชทอัปเดตล่าสุดเมื่อ " + new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+
+    function fetchChatData() {
+      const url = `${endpoints.data}?customer_id=${encodeURIComponent(state.selectedCustomerId || "")}`;
+      return fetch(url)
+        .then((response) => response.json())
+        .then(applyChatData)
+        .catch(() => {
+          liveStatus.textContent = "เชื่อมต่อข้อมูลสดไม่ได้ชั่วคราว";
+        });
+    }
+
+    function selectCustomer(customerId) {
+      state.selectedCustomerId = customerId;
+      state.lastMessageFingerprint = "";
+      history.replaceState(null, "", `${endpoints.chats}?customer_id=${encodeURIComponent(customerId)}`);
+      setMobilePanel("chat");
+      fetchChatData();
+    }
+
+    customerMessages.scrollTop = customerMessages.scrollHeight;
+    customerList.querySelectorAll(".customer-link").forEach((link) => {
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        selectCustomer(link.dataset.customerId);
+      });
+    });
+
+    globalAiForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      globalAiButton.disabled = true;
+      const formData = new FormData(globalAiForm);
+      fetch(endpoints.toggleGlobal, {
+        method: "POST",
+        body: formData,
+        headers: { "X-Requested-With": "fetch" }
+      })
+        .then((response) => response.json())
+        .then((data) => updateGlobalAi(data.global_ai_enabled))
+        .finally(() => {
+          globalAiButton.disabled = false;
+          fetchChatData();
+        });
+    });
+
+    customerAiForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!state.selectedCustomerId) return;
+      customerAiButton.disabled = true;
+      const formData = new FormData(customerAiForm);
+      fetch(endpoints.toggleCustomer, {
+        method: "POST",
+        body: formData,
+        headers: { "X-Requested-With": "fetch" }
+      })
+        .then((response) => response.json())
+        .then((data) => updateCustomerControls(data.customer_id, data.ai_enabled))
+        .finally(() => {
+          customerAiButton.disabled = false;
+          fetchChatData();
+        });
+    });
+
+    customerSendForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const text = customerInput.value.trim();
+      if (!state.selectedCustomerId || !text) {
+        customerInput.focus();
+        return;
+      }
+      state.isSending = true;
+      customerSendButton.disabled = true;
+      customerSendButton.textContent = "กำลังส่ง...";
+      const formData = new FormData(customerSendForm);
+      formData.set("message", text);
+      fetch(endpoints.send, {
+        method: "POST",
+        body: formData,
+        headers: { "X-Requested-With": "fetch" }
+      })
+        .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+          if (!ok) throw new Error(data.message || "ส่งข้อความไม่สำเร็จ");
+          customerInput.value = "";
+          state.lastMessageFingerprint = "";
+          renderMessages((data.selected_chat && data.selected_chat.messages) || []);
+          fetchChatData();
+        })
+        .catch((error) => {
+          liveStatus.textContent = error.message || "ส่งข้อความไม่สำเร็จ";
+        })
+        .finally(() => {
+          state.isSending = false;
+          customerSendButton.disabled = !state.selectedCustomerId;
+          customerSendButton.textContent = "ส่ง";
+        });
+    });
+
+    setInterval(fetchChatData, 2500);
+    fetchChatData();
 
     const baiMessages = document.getElementById("nong-bai-messages");
     const baiForm = document.getElementById("nong-bai-form");

@@ -56,7 +56,7 @@ FALLBACK_MESSAGE = (
 )
 AI_UNAVAILABLE_MESSAGE = (
     "ขอโทษนะคะ ตอนนี้น้องก้านมึนหัวอยู่ "
-    "กลับมาสอบถามน้องก้านใหม่ตอนน้องก้านมีสติแล้วนะคะ"
+    "น้องก้านจะกลับมาตอบตอนมีสติแล้วนะคะ"
 )
 NON_TEXT_MESSAGE = "รบกวนพิมพ์คำถามเป็นข้อความนะคะ น้องก้านจะช่วยดูข้อมูลให้ค่ะ"
 
@@ -151,6 +151,18 @@ def is_customer_ai_enabled(customer_id: str) -> bool:
     return settings.get(customer_id, {}).get("ai_enabled", True)
 
 
+def is_global_ai_enabled() -> bool:
+    settings = load_customer_ai_settings()
+    return settings.get("__global__", {}).get("ai_enabled", True)
+
+
+def set_global_ai_enabled(enabled: bool) -> None:
+    settings = load_customer_ai_settings()
+    settings.setdefault("__global__", {})["ai_enabled"] = enabled
+    settings["__global__"]["updated_at"] = utc_now_iso()
+    save_customer_ai_settings(settings)
+
+
 def set_customer_ai_enabled(customer_id: str, enabled: bool) -> None:
     settings = load_customer_ai_settings()
     settings.setdefault(customer_id, {})["ai_enabled"] = enabled
@@ -190,6 +202,27 @@ def append_customer_message(customer_id: str, role: str, text: str) -> None:
 def get_event_customer_id(event: dict) -> str:
     source = event.get("source", {})
     return source.get("userId") or source.get("groupId") or source.get("roomId") or "unknown"
+
+
+def customer_chat_summary(customer_id: str, chat: dict, settings: dict) -> dict:
+    messages = chat.get("messages", [])
+    return {
+        "customer_id": customer_id,
+        "display_name": chat.get("display_name") or customer_id,
+        "updated_at": chat.get("updated_at", ""),
+        "last_message": messages[-1].get("text", "") if messages else "",
+        "ai_enabled": settings.get(customer_id, {}).get("ai_enabled", True),
+    }
+
+
+def public_customer_chat(customer_id: str, chat: dict, settings: dict) -> dict:
+    return {
+        "customer_id": customer_id,
+        "display_name": chat.get("display_name") or customer_id,
+        "updated_at": chat.get("updated_at", ""),
+        "ai_enabled": settings.get(customer_id, {}).get("ai_enabled", True),
+        "messages": chat.get("messages", []),
+    }
 
 
 def load_training_history() -> list[dict]:
@@ -618,6 +651,10 @@ def handle_event(event: dict) -> None:
 
     if message.get("type") != "text":
         append_customer_message(customer_id, "customer", "[ส่งข้อความที่ไม่ใช่ตัวอักษร]")
+        if not is_global_ai_enabled():
+            reply_to_line(reply_token, AI_UNAVAILABLE_MESSAGE)
+            append_customer_message(customer_id, "nong_kan", AI_UNAVAILABLE_MESSAGE)
+            return
         if not is_customer_ai_enabled(customer_id):
             return
         reply_to_line(reply_token, NON_TEXT_MESSAGE)
@@ -627,6 +664,10 @@ def handle_event(event: dict) -> None:
     customer_text = message.get("text", "").strip()
     if not customer_text:
         append_customer_message(customer_id, "customer", "[ข้อความว่าง]")
+        if not is_global_ai_enabled():
+            reply_to_line(reply_token, AI_UNAVAILABLE_MESSAGE)
+            append_customer_message(customer_id, "nong_kan", AI_UNAVAILABLE_MESSAGE)
+            return
         if not is_customer_ai_enabled(customer_id):
             return
         reply_to_line(reply_token, NON_TEXT_MESSAGE)
@@ -634,6 +675,11 @@ def handle_event(event: dict) -> None:
         return
 
     append_customer_message(customer_id, "customer", customer_text)
+    if not is_global_ai_enabled():
+        reply_to_line(reply_token, AI_UNAVAILABLE_MESSAGE)
+        append_customer_message(customer_id, "nong_kan", AI_UNAVAILABLE_MESSAGE)
+        return
+
     if not is_customer_ai_enabled(customer_id):
         return
 
@@ -883,16 +929,7 @@ def admin_customer_chats():
     settings = load_customer_ai_settings()
     customers = []
     for customer_id, chat in chats.items():
-        messages = chat.get("messages", [])
-        customers.append(
-            {
-                "customer_id": customer_id,
-                "display_name": chat.get("display_name") or customer_id,
-                "updated_at": chat.get("updated_at", ""),
-                "last_message": messages[-1].get("text", "") if messages else "",
-                "ai_enabled": settings.get(customer_id, {}).get("ai_enabled", True),
-            }
-        )
+        customers.append(customer_chat_summary(customer_id, chat, settings))
     customers.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
     selected_customer_id = request.args.get("customer_id") or (customers[0]["customer_id"] if customers else "")
     selected_chat = chats.get(selected_customer_id, {})
@@ -904,8 +941,38 @@ def admin_customer_chats():
         selected_customer_id=selected_customer_id,
         selected_chat=selected_chat,
         selected_ai_enabled=settings.get(selected_customer_id, {}).get("ai_enabled", True),
+        global_ai_enabled=is_global_ai_enabled(),
         nong_bai_messages=session.get("nong_bai_messages", []),
         message=request.args.get("message", ""),
+    )
+
+
+@app.get("/admin/chats/data")
+def admin_customer_chats_data():
+    require_admin()
+
+    chats = load_customer_chats()
+    settings = load_customer_ai_settings()
+    customers = [
+        customer_chat_summary(customer_id, chat, settings)
+        for customer_id, chat in chats.items()
+    ]
+    customers.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+    selected_customer_id = request.args.get("customer_id") or (customers[0]["customer_id"] if customers else "")
+    selected_chat = public_customer_chat(
+        selected_customer_id,
+        chats.get(selected_customer_id, {}),
+        settings,
+    ) if selected_customer_id else {}
+    return jsonify(
+        {
+            "ok": True,
+            "customers": customers,
+            "selected_customer_id": selected_customer_id,
+            "selected_chat": selected_chat,
+            "selected_ai_enabled": settings.get(selected_customer_id, {}).get("ai_enabled", True),
+            "global_ai_enabled": is_global_ai_enabled(),
+        }
     )
 
 
@@ -918,7 +985,21 @@ def admin_toggle_customer_ai():
     enabled = request.form.get("enabled") == "true"
     if customer_id:
         set_customer_ai_enabled(customer_id, enabled)
+    if request.headers.get("X-Requested-With") == "fetch":
+        return jsonify({"ok": True, "customer_id": customer_id, "ai_enabled": enabled})
     return redirect(url_for("admin_customer_chats", customer_id=customer_id))
+
+
+@app.post("/admin/chats/toggle-global-ai")
+def admin_toggle_global_ai():
+    require_admin()
+    verify_csrf_token()
+
+    enabled = request.form.get("enabled") == "true"
+    set_global_ai_enabled(enabled)
+    if request.headers.get("X-Requested-With") == "fetch":
+        return jsonify({"ok": True, "global_ai_enabled": enabled})
+    return redirect(url_for("admin_customer_chats", customer_id=request.form.get("customer_id", "")))
 
 
 @app.post("/admin/chats/send")
@@ -929,11 +1010,25 @@ def admin_send_customer_message():
     customer_id = request.form.get("customer_id", "").strip()
     text = request.form.get("message", "").strip()
     if not customer_id or not text:
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify({"ok": False, "message": "กรุณาเลือกแชทและพิมพ์ข้อความค่ะ"}), 400
         return redirect(url_for("admin_customer_chats", customer_id=customer_id, message="กรุณาเลือกแชทและพิมพ์ข้อความค่ะ"))
 
     if push_to_line(customer_id, text):
         append_customer_message(customer_id, "admin", text)
+        chats = load_customer_chats()
+        settings = load_customer_ai_settings()
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify(
+                {
+                    "ok": True,
+                    "message": "ส่งข้อความให้ลูกค้าแล้วค่ะ",
+                    "selected_chat": public_customer_chat(customer_id, chats.get(customer_id, {}), settings),
+                }
+            )
         return redirect(url_for("admin_customer_chats", customer_id=customer_id, message="ส่งข้อความให้ลูกค้าแล้วค่ะ"))
+    if request.headers.get("X-Requested-With") == "fetch":
+        return jsonify({"ok": False, "message": "ส่งข้อความไม่สำเร็จค่ะ"}), 502
     return redirect(url_for("admin_customer_chats", customer_id=customer_id, message="ส่งข้อความไม่สำเร็จค่ะ"))
 
 
