@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>แชทลูกค้า | น้องก้าน</title>
+  <style>
+    :root {
+      --bg: #eef4ef;
+      --panel: #ffffff;
+      --ink: #1f2723;
+      --muted: #6a756f;
+      --line: #d9e1dc;
+      --line-green: #06c755;
+      --accent: #23745b;
+      --soft: #f3f7f4;
+      --danger: #b3342f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    header {
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 22px; }
+    button, .link-button {
+      min-height: 38px;
+      border: 0;
+      border-radius: 8px;
+      padding: 0 12px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+    }
+    .ghost {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+    .danger {
+      color: var(--danger);
+      border-color: #e3b8b3;
+    }
+    .shell {
+      height: calc(100vh - 64px);
+      display: grid;
+      grid-template-columns: 280px minmax(360px, 1fr) 340px;
+      min-height: 0;
+    }
+    .customers, .assistant {
+      min-height: 0;
+      overflow-y: auto;
+      background: var(--panel);
+    }
+    .customers {
+      border-right: 1px solid var(--line);
+    }
+    .assistant {
+      border-left: 1px solid var(--line);
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+    .section-head {
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .customer-link {
+      display: grid;
+      gap: 4px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-decoration: none;
+      color: var(--ink);
+    }
+    .customer-link.active { background: #e7f6ee; }
+    .customer-id {
+      font-weight: 900;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .last-message {
+      color: var(--muted);
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ai-chip {
+      width: fit-content;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-weight: 900;
+      background: #e7f6ee;
+      color: #116b3b;
+    }
+    .ai-chip.off {
+      background: #fff0ef;
+      color: #b3342f;
+    }
+    .chat {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      background: #8cabd8;
+    }
+    .chat-head {
+      padding: 12px 14px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .chat-title {
+      min-width: 0;
+    }
+    .chat-title h2 {
+      font-size: 18px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chat-title p {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .messages {
+      min-height: 0;
+      overflow-y: auto;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .bubble {
+      max-width: min(72%, 560px);
+      border-radius: 12px;
+      padding: 10px 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, .05);
+    }
+    .customer {
+      align-self: flex-start;
+      background: #fff;
+    }
+    .nong_kan, .admin {
+      align-self: flex-end;
+      background: #dcf8c6;
+    }
+    .bubble-meta {
+      margin-top: 4px;
+      color: rgba(0, 0, 0, .48);
+      font-size: 11px;
+    }
+    .composer {
+      padding: 12px;
+      background: var(--panel);
+      border-top: 1px solid var(--line);
+    }
+    .composer form {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+    }
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    textarea {
+      min-height: 76px;
+      resize: vertical;
+    }
+    .assistant-body {
+      min-height: 0;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #fbfdfb;
+    }
+    .assistant-bubble {
+      border-radius: 8px;
+      padding: 10px 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    .assistant-bubble.user {
+      align-self: flex-end;
+      background: var(--accent);
+      color: #fff;
+    }
+    .assistant-bubble.bot {
+      align-self: flex-start;
+      background: #e7f6ee;
+      color: #16573f;
+    }
+    .assistant-compose {
+      padding: 12px;
+      border-top: 1px solid var(--line);
+    }
+    .assistant-compose form {
+      display: grid;
+      gap: 8px;
+    }
+    .empty {
+      padding: 24px;
+      color: var(--muted);
+      text-align: center;
+    }
+    .message {
+      color: #116b3b;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    @media (max-width: 980px) {
+      .shell { grid-template-columns: 1fr; height: auto; }
+      .customers, .assistant { max-height: none; border: 0; }
+      .chat { min-height: 70vh; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>แชทลูกค้า</h1>
+      {% if message %}<p class="message">{{ message }}</p>{% endif %}
+    </div>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <a class="link-button ghost" href="{{ url_for('admin_dashboard') }}">กลับหน้าเทรน</a>
+      <form method="post" action="{{ url_for('admin_logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="ghost" type="submit">ออกจากระบบ</button>
+      </form>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="customers">
+      <div class="section-head">
+        <h3>ลูกค้า</h3>
+        <span>{{ customers|length }} แชท</span>
+      </div>
+      {% if customers %}
+        {% for customer in customers %}
+          <a class="customer-link {{ 'active' if customer.customer_id == selected_customer_id else '' }}" href="{{ url_for('admin_customer_chats', customer_id=customer.customer_id) }}">
+            <div class="customer-id">{{ customer.display_name }}</div>
+            <div class="last-message">{{ customer.last_message or 'ยังไม่มีข้อความ' }}</div>
+            <div class="ai-chip {{ '' if customer.ai_enabled else 'off' }}">{{ 'AI เปิด' if customer.ai_enabled else 'AI ปิด' }}</div>
+          </a>
+        {% endfor %}
+      {% else %}
+        <div class="empty">ยังไม่มีแชทลูกค้า รอให้ลูกค้าทัก LINE OA เข้ามาก่อนค่ะ</div>
+      {% endif %}
+    </aside>
+
+    <main class="chat">
+      {% if selected_customer_id %}
+        <div class="chat-head">
+          <div class="chat-title">
+            <h2>{{ selected_customer_id }}</h2>
+            <p>{{ 'น้องก้านตอบอัตโนมัติอยู่' if selected_ai_enabled else 'ปิด AI แล้ว แอดมินตอบเอง' }}</p>
+          </div>
+          <form method="post" action="{{ url_for('admin_toggle_customer_ai') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
+            <input type="hidden" name="enabled" value="{{ 'false' if selected_ai_enabled else 'true' }}">
+            <button class="{{ 'danger ghost' if selected_ai_enabled else '' }}" type="submit">{{ 'ปิด AI' if selected_ai_enabled else 'เปิด AI' }}</button>
+          </form>
+        </div>
+        <div class="messages" id="customer-messages">
+          {% for item in selected_chat.messages or [] %}
+            <div class="bubble {{ item.role }}">
+              {{ item.text }}
+              <div class="bubble-meta">{{ item.role }} · {{ item.created_at[:19].replace('T', ' ') if item.created_at else '' }}</div>
+            </div>
+          {% endfor %}
+        </div>
+        <div class="composer">
+          <form method="post" action="{{ url_for('admin_send_customer_message') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
+            <textarea name="message" placeholder="พิมพ์ตอบลูกค้าด้วยตัวเอง"></textarea>
+            <button type="submit">ส่ง</button>
+          </form>
+        </div>
+      {% else %}
+        <div class="empty">เลือกแชทลูกค้าจากฝั่งซ้าย</div>
+      {% endif %}
+    </main>
+
+    <aside class="assistant">
+      <div class="section-head">
+        <div>
+          <h3>น้องใบ</h3>
+          <p class="last-message">AI หลังบ้าน รู้แชทลูกค้าและฐานความรู้</p>
+        </div>
+        <form method="post" action="{{ url_for('admin_clear_nong_bai') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
+          <button class="ghost" type="submit">ล้าง</button>
+        </form>
+      </div>
+      <div class="assistant-body" id="nong-bai-messages">
+        {% if nong_bai_messages %}
+          {% for item in nong_bai_messages %}
+            <div class="assistant-bubble {{ item.role }}">{{ item.text }}</div>
+          {% endfor %}
+        {% else %}
+          <div class="assistant-bubble bot">ถามน้องใบได้เลย เช่น “ลูกค้าชอบถามอะไร” หรือ “แชทนี้ควรตอบยังไงดี”</div>
+        {% endif %}
+      </div>
+      <div class="assistant-compose">
+        <form id="nong-bai-form" method="post" action="{{ url_for('admin_ask_nong_bai') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
+          <textarea name="question" id="nong-bai-question" placeholder="ถามน้องใบ..."></textarea>
+          <button type="submit" id="nong-bai-submit">ถามน้องใบ</button>
+        </form>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const customerMessages = document.getElementById("customer-messages");
+    if (customerMessages) customerMessages.scrollTop = customerMessages.scrollHeight;
+
+    const baiMessages = document.getElementById("nong-bai-messages");
+    const baiForm = document.getElementById("nong-bai-form");
+    const baiQuestion = document.getElementById("nong-bai-question");
+    const baiSubmit = document.getElementById("nong-bai-submit");
+
+    function appendBai(role, text) {
+      const bubble = document.createElement("div");
+      bubble.className = `assistant-bubble ${role}`;
+      bubble.textContent = text;
+      baiMessages.appendChild(bubble);
+      baiMessages.scrollTop = baiMessages.scrollHeight;
+      return bubble;
+    }
+
+    baiForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const question = baiQuestion.value.trim();
+      if (!question) {
+        baiQuestion.focus();
+        return;
+      }
+      appendBai("user", question);
+      const loading = appendBai("bot", "น้องใบกำลังดูหลังบ้านให้อยู่ค่ะ...");
+      baiQuestion.value = "";
+      baiSubmit.disabled = true;
+      baiSubmit.textContent = "กำลังตอบ...";
+
+      const formData = new FormData(baiForm);
+      formData.set("question", question);
+      fetch(baiForm.action, {
+        method: "POST",
+        body: formData,
+        headers: { "X-Requested-With": "fetch" }
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          loading.textContent = data.answer || "น้องใบตอบไม่ได้ค่ะ";
+        })
+        .catch(() => {
+          loading.textContent = "น้องใบสะดุดค่ะ ลองถามใหม่อีกครั้งนะคะ";
+        })
+        .finally(() => {
+          baiSubmit.disabled = false;
+          baiSubmit.textContent = "ถามน้องใบ";
+        });
+    });
+  </script>
+</body>
+</html>

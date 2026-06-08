@@ -32,6 +32,7 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
 LINE_REPLY_API_URL = "https://api.line.me/v2/bot/message/reply"
+LINE_PUSH_API_URL = "https://api.line.me/v2/bot/message/push"
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 
@@ -43,6 +44,8 @@ APP_URL = os.getenv("APP_URL", "")
 
 KNOWLEDGE_BASE_PATH = Path(os.getenv("KNOWLEDGE_BASE_PATH", "knowledge_base.json"))
 TRAINING_HISTORY_PATH = Path(os.getenv("TRAINING_HISTORY_PATH", "training_history.json"))
+CUSTOMER_CHATS_PATH = Path(os.getenv("CUSTOMER_CHATS_PATH", "customer_chats.json"))
+CUSTOMER_AI_SETTINGS_PATH = Path(os.getenv("CUSTOMER_AI_SETTINGS_PATH", "customer_ai_settings.json"))
 AI_TIMEOUT_SECONDS = int(os.getenv("AI_TIMEOUT_SECONDS", "20"))
 AI_TRAINING_TIMEOUT_SECONDS = int(os.getenv("AI_TRAINING_TIMEOUT_SECONDS", "45"))
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
@@ -102,6 +105,91 @@ def load_knowledge_base() -> dict:
 def save_knowledge_base(knowledge_base: dict) -> None:
     formatted_json = json.dumps(knowledge_base, ensure_ascii=False, indent=2)
     KNOWLEDGE_BASE_PATH.write_text(formatted_json + "\n", encoding="utf-8")
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def load_json_file(path: Path, fallback):
+    if not path.exists():
+        return fallback
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        logger.exception("JSON file is invalid: %s", path)
+        return fallback
+    return data
+
+
+def save_json_file(path: Path, data) -> None:
+    formatted_json = json.dumps(data, ensure_ascii=False, indent=2)
+    path.write_text(formatted_json + "\n", encoding="utf-8")
+
+
+def load_customer_chats() -> dict:
+    data = load_json_file(CUSTOMER_CHATS_PATH, {})
+    return data if isinstance(data, dict) else {}
+
+
+def save_customer_chats(chats: dict) -> None:
+    save_json_file(CUSTOMER_CHATS_PATH, chats)
+
+
+def load_customer_ai_settings() -> dict:
+    data = load_json_file(CUSTOMER_AI_SETTINGS_PATH, {})
+    return data if isinstance(data, dict) else {}
+
+
+def save_customer_ai_settings(settings: dict) -> None:
+    save_json_file(CUSTOMER_AI_SETTINGS_PATH, settings)
+
+
+def is_customer_ai_enabled(customer_id: str) -> bool:
+    settings = load_customer_ai_settings()
+    return settings.get(customer_id, {}).get("ai_enabled", True)
+
+
+def set_customer_ai_enabled(customer_id: str, enabled: bool) -> None:
+    settings = load_customer_ai_settings()
+    settings.setdefault(customer_id, {})["ai_enabled"] = enabled
+    settings[customer_id]["updated_at"] = utc_now_iso()
+    save_customer_ai_settings(settings)
+
+
+def append_customer_message(customer_id: str, role: str, text: str) -> None:
+    if not customer_id:
+        return
+
+    chats = load_customer_chats()
+    chat = chats.setdefault(
+        customer_id,
+        {
+            "customer_id": customer_id,
+            "display_name": customer_id,
+            "messages": [],
+            "created_at": utc_now_iso(),
+            "updated_at": utc_now_iso(),
+        },
+    )
+    chat["display_name"] = chat.get("display_name") or customer_id
+    chat["updated_at"] = utc_now_iso()
+    chat.setdefault("messages", []).append(
+        {
+            "id": uuid.uuid4().hex,
+            "role": role,
+            "text": text,
+            "created_at": utc_now_iso(),
+        }
+    )
+    chat["messages"] = chat["messages"][-200:]
+    save_customer_chats(chats)
+
+
+def get_event_customer_id(event: dict) -> str:
+    source = event.get("source", {})
+    return source.get("userId") or source.get("groupId") or source.get("roomId") or "unknown"
 
 
 def load_training_history() -> list[dict]:
@@ -390,6 +478,80 @@ def ask_ai(customer_message: str) -> str:
     return answer
 
 
+def ask_nong_bai(question: str, selected_customer_id: str = "") -> str:
+    if not OPENROUTER_API_KEY:
+        return AI_UNAVAILABLE_MESSAGE
+
+    chats = load_customer_chats()
+    settings = load_customer_ai_settings()
+    knowledge_base = load_knowledge_base()
+    selected_chat = chats.get(selected_customer_id, {}) if selected_customer_id else {}
+    compact_chats = []
+    for customer_id, chat in sorted(
+        chats.items(),
+        key=lambda item: item[1].get("updated_at", ""),
+        reverse=True,
+    )[:30]:
+        compact_chats.append(
+            {
+                "customer_id": customer_id,
+                "ai_enabled": settings.get(customer_id, {}).get("ai_enabled", True),
+                "recent_messages": chat.get("messages", [])[-12:],
+            }
+        )
+
+    system_prompt = f"""
+คุณคือ "น้องใบ" AI ผู้ช่วยหลังบ้านของแอดมินบริษัทน้องก้าน
+
+หน้าที่:
+- ตอบคำถามแอดมินเกี่ยวกับแชทลูกค้า ฐานความรู้ และสถานะหลังบ้าน
+- สรุปว่าลูกค้าชอบถามอะไร ลูกค้าคนไหนต้องตอบเอง หรือควรปรับฐานความรู้อะไร
+- พูดไทยสุภาพ กระชับ เป็นกันเอง
+- ห้ามบอกว่าทำสิ่งที่ระบบยังทำไม่ได้ เช่น ส่งข้อความแทนแอดมินหรือแก้ข้อมูลโดยตรง
+
+ฐานความรู้ปัจจุบัน:
+{json.dumps(knowledge_base, ensure_ascii=False, indent=2)}
+
+สถานะ AI รายลูกค้า:
+{json.dumps(settings, ensure_ascii=False, indent=2)}
+
+แชทลูกค้าล่าสุด:
+{json.dumps(compact_chats, ensure_ascii=False, indent=2)}
+
+แชทลูกค้าที่กำลังเปิดอยู่:
+{json.dumps(selected_chat, ensure_ascii=False, indent=2)}
+""".strip()
+    payload = {
+        "model": AI_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": question},
+        ],
+        "temperature": 0.2,
+        "max_tokens": 700,
+    }
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "X-Title": APP_NAME,
+    }
+    if APP_URL:
+        headers["HTTP-Referer"] = APP_URL
+
+    try:
+        response = requests.post(
+            f"{AI_API_BASE_URL}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=AI_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"].strip()
+    except (requests.RequestException, KeyError, IndexError, TypeError, ValueError):
+        logger.exception("Nong Bai request failed.")
+        return "ขอโทษค่ะ ตอนนี้น้องใบตอบไม่ได้ ลองถามใหม่อีกครั้งนะคะ"
+
+
 def reply_to_line(reply_token: str, text: str) -> None:
     if not LINE_CHANNEL_ACCESS_TOKEN:
         logger.warning("LINE_CHANNEL_ACCESS_TOKEN is not configured.")
@@ -416,26 +578,68 @@ def reply_to_line(reply_token: str, text: str) -> None:
         logger.exception("LINE reply API request failed.")
 
 
+def push_to_line(customer_id: str, text: str) -> bool:
+    if not LINE_CHANNEL_ACCESS_TOKEN:
+        logger.warning("LINE_CHANNEL_ACCESS_TOKEN is not configured.")
+        return False
+
+    payload = {
+        "to": customer_id,
+        "messages": [{"type": "text", "text": text[:5000]}],
+    }
+    headers = {
+        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        response = requests.post(
+            LINE_PUSH_API_URL,
+            headers=headers,
+            json=payload,
+            timeout=10,
+        )
+        response.raise_for_status()
+        return True
+    except requests.RequestException:
+        logger.exception("LINE push API request failed.")
+        return False
+
+
 def handle_event(event: dict) -> None:
     if event.get("type") != "message":
         return
 
+    customer_id = get_event_customer_id(event)
     reply_token = event.get("replyToken")
     message = event.get("message", {})
     if not reply_token:
         return
 
     if message.get("type") != "text":
+        append_customer_message(customer_id, "customer", "[ส่งข้อความที่ไม่ใช่ตัวอักษร]")
+        if not is_customer_ai_enabled(customer_id):
+            return
         reply_to_line(reply_token, NON_TEXT_MESSAGE)
+        append_customer_message(customer_id, "nong_kan", NON_TEXT_MESSAGE)
         return
 
     customer_text = message.get("text", "").strip()
     if not customer_text:
+        append_customer_message(customer_id, "customer", "[ข้อความว่าง]")
+        if not is_customer_ai_enabled(customer_id):
+            return
         reply_to_line(reply_token, NON_TEXT_MESSAGE)
+        append_customer_message(customer_id, "nong_kan", NON_TEXT_MESSAGE)
+        return
+
+    append_customer_message(customer_id, "customer", customer_text)
+    if not is_customer_ai_enabled(customer_id):
         return
 
     answer = ask_ai(customer_text)
     reply_to_line(reply_token, answer)
+    append_customer_message(customer_id, "nong_kan", answer)
 
 
 @app.get("/")
@@ -662,6 +866,102 @@ def admin_revert_training_history():
     if revert_training_history_entry(entry_id):
         return redirect(url_for("admin_dashboard", message="ย้อนฐานความรู้กลับก่อนรายการนี้แล้วค่ะ"))
     return redirect(url_for("admin_dashboard", message="ย้อนรายการนี้ไม่ได้ค่ะ"))
+
+
+@app.get("/admin/chats")
+def admin_customer_chats():
+    if not ADMIN_PASSWORD:
+        return render_template(
+            "admin_setup.html",
+            app_name=APP_NAME,
+        ), 503
+
+    if not is_admin_logged_in():
+        return redirect(url_for("admin_login_page"))
+
+    chats = load_customer_chats()
+    settings = load_customer_ai_settings()
+    customers = []
+    for customer_id, chat in chats.items():
+        messages = chat.get("messages", [])
+        customers.append(
+            {
+                "customer_id": customer_id,
+                "display_name": chat.get("display_name") or customer_id,
+                "updated_at": chat.get("updated_at", ""),
+                "last_message": messages[-1].get("text", "") if messages else "",
+                "ai_enabled": settings.get(customer_id, {}).get("ai_enabled", True),
+            }
+        )
+    customers.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+    selected_customer_id = request.args.get("customer_id") or (customers[0]["customer_id"] if customers else "")
+    selected_chat = chats.get(selected_customer_id, {})
+    return render_template(
+        "admin_chats.html",
+        app_name=APP_NAME,
+        csrf_token=get_csrf_token(),
+        customers=customers,
+        selected_customer_id=selected_customer_id,
+        selected_chat=selected_chat,
+        selected_ai_enabled=settings.get(selected_customer_id, {}).get("ai_enabled", True),
+        nong_bai_messages=session.get("nong_bai_messages", []),
+        message=request.args.get("message", ""),
+    )
+
+
+@app.post("/admin/chats/toggle-ai")
+def admin_toggle_customer_ai():
+    require_admin()
+    verify_csrf_token()
+
+    customer_id = request.form.get("customer_id", "")
+    enabled = request.form.get("enabled") == "true"
+    if customer_id:
+        set_customer_ai_enabled(customer_id, enabled)
+    return redirect(url_for("admin_customer_chats", customer_id=customer_id))
+
+
+@app.post("/admin/chats/send")
+def admin_send_customer_message():
+    require_admin()
+    verify_csrf_token()
+
+    customer_id = request.form.get("customer_id", "").strip()
+    text = request.form.get("message", "").strip()
+    if not customer_id or not text:
+        return redirect(url_for("admin_customer_chats", customer_id=customer_id, message="กรุณาเลือกแชทและพิมพ์ข้อความค่ะ"))
+
+    if push_to_line(customer_id, text):
+        append_customer_message(customer_id, "admin", text)
+        return redirect(url_for("admin_customer_chats", customer_id=customer_id, message="ส่งข้อความให้ลูกค้าแล้วค่ะ"))
+    return redirect(url_for("admin_customer_chats", customer_id=customer_id, message="ส่งข้อความไม่สำเร็จค่ะ"))
+
+
+@app.post("/admin/chats/nong-bai")
+def admin_ask_nong_bai():
+    require_admin()
+    verify_csrf_token()
+
+    question = request.form.get("question", "").strip()
+    selected_customer_id = request.form.get("customer_id", "").strip()
+    if not question:
+        return jsonify({"ok": False, "answer": "พิมพ์คำถามถึงน้องใบก่อนค่ะ"}), 400
+
+    messages = list(session.get("nong_bai_messages", []))
+    messages.append({"role": "user", "text": question})
+    answer = ask_nong_bai(question, selected_customer_id)
+    messages.append({"role": "bot", "text": answer})
+    session["nong_bai_messages"] = messages[-20:]
+    return jsonify({"ok": True, "answer": answer})
+
+
+@app.post("/admin/chats/nong-bai/clear")
+def admin_clear_nong_bai():
+    require_admin()
+    verify_csrf_token()
+
+    session["nong_bai_messages"] = []
+    return redirect(url_for("admin_customer_chats", customer_id=request.form.get("customer_id", "")))
 
 
 @app.post("/admin/test")

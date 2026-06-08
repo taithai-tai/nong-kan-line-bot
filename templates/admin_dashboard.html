@@ -311,6 +311,7 @@
       </div>
       <form method="post" action="{{ url_for('admin_logout') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <a class="link-button ghost" href="{{ url_for('admin_customer_chats') }}">แชทลูกค้า</a>
         <button class="ghost" type="submit">ออกจากระบบ</button>
       </form>
     </div>
