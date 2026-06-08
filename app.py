@@ -57,6 +57,7 @@ KNOWLEDGE_BASE_PATH = resolve_storage_path("KNOWLEDGE_BASE_PATH", "knowledge_bas
 TRAINING_HISTORY_PATH = resolve_storage_path("TRAINING_HISTORY_PATH", "training_history.json")
 CUSTOMER_CHATS_PATH = resolve_storage_path("CUSTOMER_CHATS_PATH", "customer_chats.json")
 CUSTOMER_AI_SETTINGS_PATH = resolve_storage_path("CUSTOMER_AI_SETTINGS_PATH", "customer_ai_settings.json")
+RESPONSE_TEMPLATES_PATH = resolve_storage_path("RESPONSE_TEMPLATES_PATH", "response_templates.json")
 AI_TIMEOUT_SECONDS = int(os.getenv("AI_TIMEOUT_SECONDS", "20"))
 AI_TRAINING_TIMEOUT_SECONDS = int(os.getenv("AI_TRAINING_TIMEOUT_SECONDS", "45"))
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
@@ -66,10 +67,29 @@ FALLBACK_MESSAGE = (
     "จะส่งต่อให้เจ้าหน้าที่ติดต่อกลับนะคะ"
 )
 AI_UNAVAILABLE_MESSAGE = (
-    "ขอโทษนะคะ ตอนนี้น้องก้านมึนหัวอยู่ "
-    "น้องก้านจะกลับมาตอบตอนมีสติแล้วนะคะ"
+    "ตอนนี้น้องก้านมึนหัวอยู่ น้องก้านจะกลับมาตอบตอนมีสตินะคะ"
 )
 NON_TEXT_MESSAGE = "รบกวนพิมพ์คำถามเป็นข้อความนะคะ น้องก้านจะช่วยดูข้อมูลให้ค่ะ"
+DEFAULT_RESPONSE_TEMPLATES = [
+    {
+        "id": "default_handoff",
+        "title": "ส่งต่อเจ้าหน้าที่",
+        "text": "ขออภัยค่ะ น้องก้านยังไม่มีข้อมูลเรื่องนี้ในระบบ จะส่งต่อให้เจ้าหน้าที่ติดต่อกลับนะคะ",
+        "created_at": "2026-06-08T00:00:00+00:00",
+    },
+    {
+        "id": "default_wait",
+        "title": "กำลังตรวจสอบ",
+        "text": "รับเรื่องแล้วนะคะ เดี๋ยวเจ้าหน้าที่ตรวจสอบข้อมูลให้ค่ะ",
+        "created_at": "2026-06-08T00:00:00+00:00",
+    },
+    {
+        "id": "default_thanks",
+        "title": "ขอบคุณ",
+        "text": "ขอบคุณที่ติดต่อมานะคะ",
+        "created_at": "2026-06-08T00:00:00+00:00",
+    },
+]
 
 
 def is_admin_logged_in() -> bool:
@@ -175,6 +195,19 @@ def save_customer_ai_settings(settings: dict) -> None:
     save_json_file(CUSTOMER_AI_SETTINGS_PATH, settings)
 
 
+def get_ai_unavailable_message() -> str:
+    settings = load_customer_ai_settings()
+    message = settings.get("__global__", {}).get("offline_message", "").strip()
+    return message or AI_UNAVAILABLE_MESSAGE
+
+
+def set_ai_unavailable_message(message: str) -> None:
+    settings = load_customer_ai_settings()
+    settings.setdefault("__global__", {})["offline_message"] = message.strip() or AI_UNAVAILABLE_MESSAGE
+    settings["__global__"]["updated_at"] = utc_now_iso()
+    save_customer_ai_settings(settings)
+
+
 def is_customer_ai_enabled(customer_id: str) -> bool:
     settings = load_customer_ai_settings()
     return settings.get(customer_id, {}).get("ai_enabled", True)
@@ -224,8 +257,55 @@ def append_customer_message(customer_id: str, role: str, text: str) -> None:
             "created_at": utc_now_iso(),
         }
     )
-    chat["messages"] = chat["messages"][-200:]
     save_customer_chats(chats)
+
+
+def load_response_templates() -> list[dict]:
+    data = load_json_file(RESPONSE_TEMPLATES_PATH, DEFAULT_RESPONSE_TEMPLATES)
+    if not isinstance(data, list):
+        return DEFAULT_RESPONSE_TEMPLATES
+    templates = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text", "")).strip()
+        if not text:
+            continue
+        templates.append(
+            {
+                "id": str(item.get("id") or uuid.uuid4().hex),
+                "title": str(item.get("title") or text[:40]),
+                "text": text,
+                "created_at": str(item.get("created_at") or utc_now_iso()),
+            }
+        )
+    return templates
+
+
+def save_response_templates(templates: list[dict]) -> None:
+    save_json_file(RESPONSE_TEMPLATES_PATH, templates)
+
+
+def add_response_template(title: str, text: str) -> dict:
+    templates = load_response_templates()
+    template = {
+        "id": uuid.uuid4().hex,
+        "title": title.strip() or text.strip()[:40],
+        "text": text.strip(),
+        "created_at": utc_now_iso(),
+    }
+    templates.append(template)
+    save_response_templates(templates)
+    return template
+
+
+def delete_response_template(template_id: str) -> bool:
+    templates = load_response_templates()
+    next_templates = [item for item in templates if item.get("id") != template_id]
+    if len(next_templates) == len(templates):
+        return False
+    save_response_templates(next_templates)
+    return True
 
 
 def get_event_customer_id(event: dict) -> str:
@@ -299,7 +379,7 @@ def load_training_history() -> list[dict]:
 
 def save_training_history(history: list[dict]) -> None:
     formatted_json = json.dumps(history, ensure_ascii=False, indent=2)
-    TRAINING_HISTORY_PATH.write_text(formatted_json + "\n", encoding="utf-8")
+    write_text_file_safely(TRAINING_HISTORY_PATH, formatted_json + "\n")
 
 
 def add_training_history_entry(
@@ -322,7 +402,7 @@ def add_training_history_entry(
         "reverted": False,
     }
     history.append(entry)
-    save_training_history(history[-80:])
+    save_training_history(history)
     return entry
 
 
@@ -420,7 +500,7 @@ def extract_json_object(text: str) -> dict:
 def train_knowledge_base_with_ai(instruction: str) -> tuple[Optional[dict], str]:
     if not OPENROUTER_API_KEY:
         logger.warning("OPENROUTER_API_KEY is not configured.")
-        return None, AI_UNAVAILABLE_MESSAGE
+        return None, get_ai_unavailable_message()
 
     current_knowledge_base = load_knowledge_base()
     current_text = json.dumps(current_knowledge_base, ensure_ascii=False, indent=2)
@@ -530,7 +610,7 @@ def is_low_information_answer(answer: str) -> bool:
 def ask_ai(customer_message: str) -> str:
     if not OPENROUTER_API_KEY:
         logger.warning("OPENROUTER_API_KEY is not configured.")
-        return AI_UNAVAILABLE_MESSAGE
+        return get_ai_unavailable_message()
 
     knowledge_base = load_knowledge_base()
     payload = {
@@ -562,7 +642,7 @@ def ask_ai(customer_message: str) -> str:
         answer = data["choices"][0]["message"]["content"].strip()
     except (requests.RequestException, KeyError, IndexError, TypeError, ValueError):
         logger.exception("AI API request failed.")
-        return AI_UNAVAILABLE_MESSAGE
+        return get_ai_unavailable_message()
 
     if is_low_information_answer(answer):
         return FALLBACK_MESSAGE
@@ -572,7 +652,7 @@ def ask_ai(customer_message: str) -> str:
 
 def ask_nong_bai(question: str, selected_customer_id: str = "") -> str:
     if not OPENROUTER_API_KEY:
-        return AI_UNAVAILABLE_MESSAGE
+        return get_ai_unavailable_message()
 
     chats = load_customer_chats()
     settings = load_customer_ai_settings()
@@ -711,8 +791,9 @@ def handle_event(event: dict) -> None:
     if message.get("type") != "text":
         append_customer_message(customer_id, "customer", "[ส่งข้อความที่ไม่ใช่ตัวอักษร]")
         if not is_global_ai_enabled():
-            reply_to_line(reply_token, AI_UNAVAILABLE_MESSAGE)
-            append_customer_message(customer_id, "nong_kan", AI_UNAVAILABLE_MESSAGE)
+            offline_message = get_ai_unavailable_message()
+            reply_to_line(reply_token, offline_message)
+            append_customer_message(customer_id, "nong_kan", offline_message)
             return
         if not is_customer_ai_enabled(customer_id):
             return
@@ -724,8 +805,9 @@ def handle_event(event: dict) -> None:
     if not customer_text:
         append_customer_message(customer_id, "customer", "[ข้อความว่าง]")
         if not is_global_ai_enabled():
-            reply_to_line(reply_token, AI_UNAVAILABLE_MESSAGE)
-            append_customer_message(customer_id, "nong_kan", AI_UNAVAILABLE_MESSAGE)
+            offline_message = get_ai_unavailable_message()
+            reply_to_line(reply_token, offline_message)
+            append_customer_message(customer_id, "nong_kan", offline_message)
             return
         if not is_customer_ai_enabled(customer_id):
             return
@@ -735,8 +817,9 @@ def handle_event(event: dict) -> None:
 
     append_customer_message(customer_id, "customer", customer_text)
     if not is_global_ai_enabled():
-        reply_to_line(reply_token, AI_UNAVAILABLE_MESSAGE)
-        append_customer_message(customer_id, "nong_kan", AI_UNAVAILABLE_MESSAGE)
+        offline_message = get_ai_unavailable_message()
+        reply_to_line(reply_token, offline_message)
+        append_customer_message(customer_id, "nong_kan", offline_message)
         return
 
     if not is_customer_ai_enabled(customer_id):
@@ -1006,6 +1089,8 @@ def admin_customer_chats():
         selected_chat=selected_chat,
         selected_ai_enabled=settings.get(selected_customer_id, {}).get("ai_enabled", True),
         global_ai_enabled=is_global_ai_enabled(),
+        offline_message=get_ai_unavailable_message(),
+        response_templates=load_response_templates(),
         nong_bai_messages=session.get("nong_bai_messages", []),
         message=request.args.get("message", ""),
         query=query,
@@ -1041,6 +1126,7 @@ def admin_customer_chats_data():
             "selected_chat": selected_chat,
             "selected_ai_enabled": settings.get(selected_customer_id, {}).get("ai_enabled", True),
             "global_ai_enabled": is_global_ai_enabled(),
+            "offline_message": get_ai_unavailable_message(),
             "query": query,
         }
     )
@@ -1072,6 +1158,48 @@ def admin_toggle_global_ai():
     return redirect(url_for("admin_customer_chats", customer_id=request.form.get("customer_id", "")))
 
 
+@app.post("/admin/chats/offline-message")
+def admin_update_offline_message():
+    require_admin()
+    verify_csrf_token()
+
+    message = request.form.get("offline_message", "").strip()
+    set_ai_unavailable_message(message)
+    if request.headers.get("X-Requested-With") == "fetch":
+        return jsonify({"ok": True, "offline_message": get_ai_unavailable_message()})
+    return redirect(url_for("admin_customer_chats", customer_id=request.form.get("customer_id", "")))
+
+
+@app.post("/admin/chats/templates")
+def admin_add_response_template():
+    require_admin()
+    verify_csrf_token()
+
+    title = request.form.get("title", "").strip()
+    text = request.form.get("text", "").strip()
+    if not text:
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify({"ok": False, "message": "กรุณาใส่ข้อความเท็มเพลตก่อนค่ะ"}), 400
+        return redirect(url_for("admin_customer_chats", message="กรุณาใส่ข้อความเท็มเพลตก่อนค่ะ"))
+
+    template = add_response_template(title, text)
+    if request.headers.get("X-Requested-With") == "fetch":
+        return jsonify({"ok": True, "template": template, "templates": load_response_templates()})
+    return redirect(url_for("admin_customer_chats", message="เพิ่มเท็มเพลตแล้วค่ะ"))
+
+
+@app.post("/admin/chats/templates/delete")
+def admin_delete_response_template():
+    require_admin()
+    verify_csrf_token()
+
+    template_id = request.form.get("template_id", "")
+    deleted = delete_response_template(template_id)
+    if request.headers.get("X-Requested-With") == "fetch":
+        return jsonify({"ok": deleted, "templates": load_response_templates()})
+    return redirect(url_for("admin_customer_chats", message="ลบเท็มเพลตแล้วค่ะ" if deleted else "ไม่พบเท็มเพลตค่ะ"))
+
+
 @app.post("/admin/chats/send")
 def admin_send_customer_message():
     require_admin()
@@ -1086,6 +1214,7 @@ def admin_send_customer_message():
 
     if push_to_line(customer_id, text):
         append_customer_message(customer_id, "admin", text)
+        set_customer_ai_enabled(customer_id, False)
         chats = load_customer_chats()
         settings = load_customer_ai_settings()
         if request.headers.get("X-Requested-With") == "fetch":
@@ -1094,6 +1223,7 @@ def admin_send_customer_message():
                     "ok": True,
                     "message": "ส่งข้อความให้ลูกค้าแล้วค่ะ",
                     "selected_chat": public_customer_chat(customer_id, chats.get(customer_id, {}), settings),
+                    "selected_ai_enabled": False,
                 }
             )
         return redirect(url_for("admin_customer_chats", customer_id=customer_id, message="ส่งข้อความให้ลูกค้าแล้วค่ะ"))

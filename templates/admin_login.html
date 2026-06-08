@@ -4,17 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>เข้าสู่ระบบ | น้องก้าน</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      color-scheme: light;
-      --bg: #f6f3ee;
-      --panel: #ffffff;
-      --ink: #201f1d;
-      --muted: #6d685f;
-      --line: #ded8cf;
-      --accent: #23745b;
-      --accent-dark: #15543f;
-      --danger: #b3342f;
+      color-scheme: dark;
+      --bg: #121416;
+      --panel: #1e2227;
+      --ink: #f7f8fb;
+      --muted: #a8b0ba;
+      --line: rgba(255, 255, 255, .1);
+      --gold: #ffd700;
+      --danger: #ff6b6b;
     }
     * { box-sizing: border-box; }
     body {
@@ -22,17 +24,19 @@
       margin: 0;
       display: grid;
       place-items: center;
-      background: var(--bg);
+      background:
+        radial-gradient(circle at top left, rgba(255, 215, 0, .12), transparent 34%),
+        linear-gradient(135deg, #121416, #1e2227);
       color: var(--ink);
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: "Kanit", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     main {
       width: min(420px, calc(100vw - 32px));
-      background: var(--panel);
+      background: rgba(30, 34, 39, .92);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 18px;
       padding: 28px;
-      box-shadow: 0 18px 48px rgba(41, 34, 25, .08);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, .36);
     }
     h1 { margin: 0 0 8px; font-size: 28px; line-height: 1.15; }
     p { margin: 0 0 22px; color: var(--muted); line-height: 1.65; }
@@ -41,9 +45,17 @@
       width: 100%;
       min-height: 46px;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 12px;
       padding: 10px 12px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, .055);
       font-size: 16px;
+      font-family: "Kanit", sans-serif;
+      outline: none;
+    }
+    input:focus {
+      border-color: rgba(255, 215, 0, .55);
+      box-shadow: 0 0 0 3px rgba(255, 215, 0, .12);
     }
     .password-row {
       display: grid;
@@ -56,29 +68,53 @@
       min-height: 46px;
       margin-top: 16px;
       border: 0;
-      border-radius: 8px;
-      background: var(--accent);
-      color: white;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #ffe66b, var(--gold));
+      color: #151515;
       font-size: 16px;
       font-weight: 800;
       cursor: pointer;
+      font-family: "Kanit", sans-serif;
+      box-shadow: 0 14px 34px rgba(255, 215, 0, .18);
+      transition: transform .18s ease, box-shadow .18s ease;
     }
-    button:hover { background: var(--accent-dark); }
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 18px 44px rgba(255, 215, 0, .28);
+    }
+    button:disabled {
+      opacity: .65;
+      cursor: progress;
+      transform: none;
+    }
     .toggle-password {
       width: auto;
       min-width: 86px;
       margin-top: 0;
       border: 1px solid var(--line);
-      background: #f2eee7;
+      background: rgba(255, 255, 255, .05);
       color: var(--ink);
       font-size: 14px;
+      box-shadow: none;
     }
-    .toggle-password:hover { background: #e8dfd2; }
+    .toggle-password:hover { background: rgba(255, 255, 255, .1); }
     .error {
       margin: 0 0 16px;
       color: var(--danger);
       font-weight: 700;
     }
+    .spinner {
+      width: 16px;
+      height: 16px;
+      margin-right: 8px;
+      border: 2px solid rgba(0, 0, 0, .22);
+      border-top-color: #151515;
+      border-radius: 999px;
+      display: none;
+      animation: spin .8s linear infinite;
+    }
+    button.loading .spinner { display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -88,18 +124,21 @@
     {% if error %}
       <div class="error">{{ error }}</div>
     {% endif %}
-    <form method="post" action="{{ url_for('admin_login') }}">
+    <form method="post" action="{{ url_for('admin_login') }}" id="login-form">
       <label for="password">รหัสผ่าน</label>
       <div class="password-row">
         <input id="password" name="password" type="password" autocomplete="current-password" inputmode="text" required autofocus>
         <button class="toggle-password" type="button" id="toggle-password" aria-controls="password" aria-pressed="false">แสดง</button>
       </div>
-      <button type="submit">เข้าสู่ระบบ</button>
+      <button type="submit" id="login-submit"><span class="spinner"></span><span id="login-submit-text">เข้าสู่ระบบ</span></button>
     </form>
   </main>
   <script>
     const passwordInput = document.getElementById("password");
     const toggleButton = document.getElementById("toggle-password");
+    const loginForm = document.getElementById("login-form");
+    const loginSubmit = document.getElementById("login-submit");
+    const loginSubmitText = document.getElementById("login-submit-text");
 
     toggleButton.addEventListener("click", () => {
       const shouldShow = passwordInput.type === "password";
@@ -107,6 +146,12 @@
       toggleButton.textContent = shouldShow ? "ซ่อน" : "แสดง";
       toggleButton.setAttribute("aria-pressed", String(shouldShow));
       passwordInput.focus();
+    });
+
+    loginForm.addEventListener("submit", () => {
+      loginSubmit.disabled = true;
+      loginSubmit.classList.add("loading");
+      loginSubmitText.textContent = "กำลังเข้าสู่ระบบ...";
     });
   </script>
 </body>

@@ -4,134 +4,161 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>แชทลูกค้า | น้องก้าน</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #eef4ef;
-      --panel: #ffffff;
-      --ink: #1f2723;
-      --muted: #6a756f;
-      --line: #d9e1dc;
-      --line-green: #06c755;
-      --accent: #23745b;
-      --soft: #f3f7f4;
-      --danger: #b3342f;
+      color-scheme: dark;
+      --bg: #121416;
+      --bg-2: #1e2227;
+      --panel: #181b20;
+      --panel-2: #20252b;
+      --panel-3: #272d34;
+      --ink: #f7f8fb;
+      --muted: #a8b0ba;
+      --line: rgba(255, 255, 255, .09);
+      --gold: #ffd700;
+      --gold-soft: rgba(255, 215, 0, .14);
+      --gold-line: rgba(255, 215, 0, .45);
+      --danger: #ff6b6b;
+      --ok: #6be49b;
+      --shadow: 0 18px 44px rgba(0, 0, 0, .34);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
-      background: var(--bg);
+      background:
+        radial-gradient(circle at top left, rgba(255, 215, 0, .08), transparent 34%),
+        linear-gradient(135deg, var(--bg), var(--bg-2));
       color: var(--ink);
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: "Kanit", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
     }
+    h1, h2, h3, p { margin: 0; }
     header {
-      min-height: 64px;
+      min-height: 72px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 14px;
-      padding: 0 18px;
+      gap: 16px;
+      padding: 12px 18px;
       border-bottom: 1px solid var(--line);
-      background: var(--panel);
+      background: rgba(18, 20, 22, .88);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, .03);
     }
-    h1, h2, h3, p { margin: 0; }
-    h1 { font-size: 22px; }
+    h1 { font-size: 24px; font-weight: 800; }
+    h2 { font-size: 18px; font-weight: 800; }
+    h3 { font-size: 16px; font-weight: 800; }
+    .status-line {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
     button, .link-button {
-      min-height: 38px;
-      border: 0;
-      border-radius: 8px;
-      padding: 0 12px;
-      background: var(--accent);
-      color: #fff;
-      font-weight: 800;
+      min-height: 40px;
+      border: 1px solid rgba(255, 215, 0, .22);
+      border-radius: 10px;
+      padding: 0 14px;
+      background: linear-gradient(180deg, #ffe66b, var(--gold));
+      color: #151515;
+      font: 800 14px/1 "Kanit", sans-serif;
       cursor: pointer;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       white-space: nowrap;
+      box-shadow: 0 10px 24px rgba(255, 215, 0, .14);
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
+    }
+    button:hover, .link-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 34px rgba(255, 215, 0, .24);
+    }
+    button:disabled {
+      opacity: .55;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
     }
     .ghost {
-      background: transparent;
+      background: rgba(255, 255, 255, .04);
       color: var(--ink);
-      border: 1px solid var(--line);
+      border-color: var(--line);
+      box-shadow: none;
+    }
+    .ghost:hover {
+      background: rgba(255, 255, 255, .08);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, .25);
     }
     .danger {
-      color: var(--danger);
-      border-color: #e3b8b3;
+      color: #fff;
+      background: rgba(255, 107, 107, .18);
+      border-color: rgba(255, 107, 107, .42);
+    }
+    .global-ai.off {
+      background: rgba(255, 107, 107, .2);
+      color: #fff;
+      border-color: rgba(255, 107, 107, .48);
+      box-shadow: 0 12px 28px rgba(255, 107, 107, .14);
     }
     .mobile-tabs {
       display: none;
       gap: 8px;
-      padding: 8px;
+      padding: 10px;
       border-bottom: 1px solid var(--line);
-      background: var(--panel);
+      background: rgba(18, 20, 22, .94);
       position: sticky;
       top: 0;
       z-index: 5;
     }
     .mobile-tab {
       flex: 1;
-      background: var(--soft);
+      background: var(--panel-2);
       color: var(--ink);
-      border: 1px solid var(--line);
+      border-color: var(--line);
+      box-shadow: none;
     }
     .mobile-tab.active {
-      background: var(--line-green);
-      color: #fff;
-      border-color: var(--line-green);
+      background: var(--gold);
+      color: #111;
+      border-color: var(--gold);
     }
     .shell {
-      height: calc(100vh - 64px);
+      height: calc(100vh - 72px);
       display: grid;
-      grid-template-columns: 280px minmax(360px, 1fr) 340px;
+      grid-template-columns: 300px minmax(360px, 1fr) 360px;
+      gap: 14px;
+      padding: 14px;
       min-height: 0;
     }
-    .global-ai {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 10px;
+    .pane {
+      min-height: 0;
+      overflow: hidden;
+      background: rgba(24, 27, 32, .92);
       border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #f8fbf9;
-      font-size: 13px;
-      font-weight: 900;
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      animation: fadeIn .24s ease both;
     }
-    .global-ai.off {
-      background: #fff0ef;
-      color: var(--danger);
-    }
-    .status-line {
-      margin-top: 3px;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 700;
-    }
-    .offline-banner {
-      display: none;
-      padding: 9px 12px;
-      background: #fff0ef;
-      color: var(--danger);
-      border-bottom: 1px solid #e3b8b3;
-      font-size: 13px;
-      font-weight: 900;
-    }
-    .offline-banner.show {
-      display: block;
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     .customers, .assistant {
-      min-height: 0;
-      overflow-y: auto;
-      background: var(--panel);
-    }
-    .customers {
-      border-right: 1px solid var(--line);
-    }
-    .assistant {
-      border-left: 1px solid var(--line);
       display: grid;
-      grid-template-rows: auto 1fr auto;
+      grid-template-rows: auto auto 1fr;
     }
     .section-head {
       padding: 14px;
@@ -140,38 +167,51 @@
       justify-content: space-between;
       align-items: center;
       gap: 10px;
+      background: rgba(255, 255, 255, .025);
+    }
+    .count-pill, .ai-chip, .pin-chip {
+      width: fit-content;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .count-pill {
+      color: var(--gold);
+      background: var(--gold-soft);
+      border: 1px solid var(--gold-line);
     }
     .customer-search {
-      padding: 10px 12px;
+      padding: 12px;
       border-bottom: 1px solid var(--line);
-      background: #fbfdfb;
+      background: rgba(255, 255, 255, .02);
     }
-    .customer-search input {
-      min-height: 40px;
-      background: #fff;
+    .customer-list, .assistant-scroll {
+      min-height: 0;
+      overflow-y: auto;
     }
     .customer-link {
       display: grid;
-      gap: 4px;
-      padding: 12px 14px;
+      gap: 6px;
+      padding: 13px 14px;
       border-bottom: 1px solid var(--line);
       text-decoration: none;
       color: var(--ink);
+      transition: transform .16s ease, background .16s ease, border-color .16s ease;
     }
-    .customer-link.active { background: #e7f6ee; }
+    .customer-link:hover {
+      transform: translateY(-1px);
+      background: rgba(255, 215, 0, .07);
+    }
+    .customer-link.active {
+      background: rgba(255, 215, 0, .13);
+      border-left: 4px solid var(--gold);
+    }
     .customer-link.pinned {
-      background: #fff8f0;
-    }
-    .customer-link.pinned.active {
-      background: #e7f6ee;
-      box-shadow: inset 4px 0 0 var(--danger);
-    }
-    .customer-link:focus-visible, button:focus-visible, textarea:focus-visible, a:focus-visible {
-      outline: 3px solid rgba(6, 199, 85, .35);
-      outline-offset: 2px;
+      background: rgba(255, 107, 107, .08);
     }
     .customer-id {
-      font-weight: 900;
+      font-weight: 800;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -184,36 +224,27 @@
       white-space: nowrap;
     }
     .ai-chip {
-      width: fit-content;
-      border-radius: 999px;
-      padding: 3px 8px;
-      font-size: 12px;
-      font-weight: 900;
-      background: #e7f6ee;
-      color: #116b3b;
+      background: rgba(107, 228, 155, .12);
+      border: 1px solid rgba(107, 228, 155, .28);
+      color: var(--ok);
     }
-    .ai-chip.off {
-      background: #fff0ef;
-      color: #b3342f;
-    }
-    .pin-chip {
-      width: fit-content;
-      border-radius: 999px;
-      padding: 3px 8px;
-      font-size: 12px;
-      font-weight: 900;
-      background: #fff0ef;
-      color: var(--danger);
+    .ai-chip.off, .pin-chip {
+      background: rgba(255, 107, 107, .12);
+      border: 1px solid rgba(255, 107, 107, .3);
+      color: #ff9b9b;
     }
     .chat {
       min-height: 0;
       display: grid;
-      grid-template-rows: auto 1fr auto;
-      background: #8cabd8;
+      grid-template-rows: auto auto 1fr auto;
+      background:
+        linear-gradient(rgba(18, 20, 22, .76), rgba(18, 20, 22, .78)),
+        radial-gradient(circle at top right, rgba(255, 215, 0, .18), transparent 30%),
+        #171a1f;
     }
     .chat-head {
-      padding: 12px 14px;
-      background: var(--panel);
+      padding: 14px;
+      background: rgba(32, 37, 43, .94);
       border-bottom: 1px solid var(--line);
       display: flex;
       justify-content: space-between;
@@ -227,19 +258,27 @@
       flex-wrap: wrap;
       justify-content: flex-end;
     }
-    .chat-title {
-      min-width: 0;
-    }
+    .chat-title { min-width: 0; }
     .chat-title h2 {
-      font-size: 18px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .chat-title p {
+      margin-top: 2px;
       color: var(--muted);
       font-size: 13px;
     }
+    .offline-banner {
+      display: none;
+      padding: 10px 14px;
+      background: rgba(255, 107, 107, .16);
+      color: #ffd1d1;
+      border-bottom: 1px solid rgba(255, 107, 107, .26);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .offline-banner.show { display: block; }
     .messages {
       min-height: 0;
       overflow-y: auto;
@@ -249,79 +288,158 @@
       gap: 10px;
     }
     .bubble {
-      max-width: min(72%, 560px);
-      border-radius: 12px;
-      padding: 10px 12px;
-      line-height: 1.55;
+      max-width: min(74%, 620px);
+      border-radius: 14px;
+      padding: 11px 13px;
+      line-height: 1.58;
       white-space: pre-wrap;
-      box-shadow: 0 1px 0 rgba(0, 0, 0, .05);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, .18);
     }
     .customer {
       align-self: flex-start;
-      background: #fff;
+      background: #f4f6f8;
+      color: #16191d;
     }
     .nong_kan, .admin {
       align-self: flex-end;
-      background: #dcf8c6;
+      background: linear-gradient(180deg, #ffe56a, var(--gold));
+      color: #151515;
     }
     .bubble-meta {
-      margin-top: 4px;
-      color: rgba(0, 0, 0, .48);
+      margin-top: 5px;
+      color: rgba(0, 0, 0, .52);
       font-size: 11px;
     }
     .composer {
       padding: 12px;
-      background: var(--panel);
+      background: rgba(32, 37, 43, .96);
       border-top: 1px solid var(--line);
+      display: grid;
+      gap: 10px;
     }
     .composer form {
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 10px;
     }
+    .template-bar {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .template-pill {
+      min-height: 34px;
+      background: rgba(255, 255, 255, .05);
+      color: var(--ink);
+      border-color: var(--line);
+      box-shadow: none;
+      font-size: 13px;
+    }
     input, textarea {
       width: 100%;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 10px 12px;
-      font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      border-radius: 12px;
+      padding: 11px 12px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, .055);
+      font: 400 15px/1.55 "Kanit", sans-serif;
+      outline: none;
+    }
+    input:focus, textarea:focus {
+      border-color: var(--gold-line);
+      box-shadow: 0 0 0 3px rgba(255, 215, 0, .12);
     }
     textarea {
       min-height: 76px;
       resize: vertical;
     }
+    .assistant {
+      grid-template-rows: auto 1fr;
+    }
+    .assistant-scroll {
+      display: grid;
+      gap: 12px;
+      padding: 12px;
+      align-content: start;
+    }
+    .tool-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .035);
+      padding: 12px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, .18);
+      transition: transform .16s ease, border-color .16s ease;
+    }
+    .tool-card:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255, 215, 0, .24);
+    }
+    .tool-card h3 { margin-bottom: 8px; }
+    .tool-card form {
+      display: grid;
+      gap: 8px;
+    }
+    .template-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .template-item {
+      display: grid;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+      background: rgba(18, 20, 22, .54);
+    }
+    .template-item strong {
+      color: var(--gold);
+      font-size: 13px;
+    }
+    .template-item p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+    .template-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .template-actions button {
+      min-height: 34px;
+      font-size: 13px;
+      padding: 0 10px;
+    }
     .assistant-body {
-      min-height: 0;
+      max-height: 260px;
       overflow-y: auto;
-      padding: 14px;
       display: flex;
       flex-direction: column;
       gap: 10px;
-      background: #fbfdfb;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(18, 20, 22, .42);
     }
     .assistant-bubble {
-      border-radius: 8px;
+      border-radius: 12px;
       padding: 10px 12px;
       line-height: 1.6;
       white-space: pre-wrap;
+      font-size: 14px;
     }
     .assistant-bubble.user {
       align-self: flex-end;
-      background: var(--accent);
-      color: #fff;
+      background: var(--gold);
+      color: #151515;
     }
     .assistant-bubble.bot {
       align-self: flex-start;
-      background: #e7f6ee;
-      color: #16573f;
-    }
-    .assistant-compose {
-      padding: 12px;
-      border-top: 1px solid var(--line);
-    }
-    .assistant-compose form {
-      display: grid;
-      gap: 8px;
+      background: rgba(255, 255, 255, .07);
+      color: var(--ink);
     }
     .empty {
       padding: 24px;
@@ -329,9 +447,9 @@
       text-align: center;
     }
     .message {
-      color: #116b3b;
+      color: var(--gold);
       font-size: 13px;
-      font-weight: 800;
+      font-weight: 700;
     }
     .visually-hidden {
       position: absolute;
@@ -346,60 +464,32 @@
     }
     @media (max-width: 980px) {
       header {
-        height: auto;
         align-items: flex-start;
         flex-direction: column;
-        padding: 12px;
       }
-      header > div:last-child {
+      .header-actions, .header-actions form, .header-actions a, .header-actions button {
         width: 100%;
-        flex-wrap: wrap;
       }
-      header form, header a, header button {
-        flex: 1;
-      }
-      .mobile-tabs {
-        display: flex;
-      }
+      .mobile-tabs { display: flex; }
       .shell {
         grid-template-columns: 1fr;
-        height: calc(100vh - 151px);
+        height: calc(100vh - 172px);
+        padding: 10px;
       }
-      .customers, .chat, .assistant {
-        display: none;
-      }
+      .customers, .chat, .assistant { display: none; }
       body[data-mobile-panel="customers"] .customers,
       body[data-mobile-panel="chat"] .chat,
       body[data-mobile-panel="assistant"] .assistant {
         display: grid;
-        min-height: 0;
       }
-      body[data-mobile-panel="customers"] .customers { display: block; }
-      .customers {
-        border-right: 0;
-        border-bottom: 1px solid var(--line);
-      }
-      .chat { min-height: 0; }
-      .assistant {
-        border-left: 0;
-        border-top: 1px solid var(--line);
-      }
-      .composer form {
-        grid-template-columns: 1fr;
-      }
-      .bubble {
-        max-width: 88%;
-      }
+      .composer form { grid-template-columns: 1fr; }
+      .bubble { max-width: 88%; }
     }
-    @media (min-width: 981px) and (max-width: 1180px) {
-      .shell {
-        grid-template-columns: 240px minmax(360px, 1fr);
-      }
+    @media (min-width: 981px) and (max-width: 1220px) {
+      .shell { grid-template-columns: 280px minmax(360px, 1fr); }
       .assistant {
         grid-column: 1 / -1;
         min-height: 420px;
-        border-left: 0;
-        border-top: 1px solid var(--line);
       }
     }
   </style>
@@ -411,7 +501,7 @@
       <p class="status-line" id="live-status">กำลังเชื่อมต่อข้อมูลแชทแบบเรียลไทม์</p>
       {% if message %}<p class="message">{{ message }}</p>{% endif %}
     </div>
-    <div style="display:flex; gap:8px; align-items:center;">
+    <div class="header-actions">
       <form id="global-ai-form" method="post" action="{{ url_for('admin_toggle_global_ai') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
@@ -431,20 +521,20 @@
   <nav class="mobile-tabs" aria-label="สลับหน้าต่างแอดมิน">
     <button class="mobile-tab active" type="button" data-panel="customers">ลูกค้า</button>
     <button class="mobile-tab" type="button" data-panel="chat">แชท</button>
-    <button class="mobile-tab" type="button" data-panel="assistant">น้องใบ</button>
+    <button class="mobile-tab" type="button" data-panel="assistant">ตั้งค่า</button>
   </nav>
 
   <div class="shell">
-    <aside class="customers" id="customers-pane">
+    <aside class="pane customers">
       <div class="section-head">
         <h3>ลูกค้า</h3>
-        <span id="customer-count">{{ customers|length }} แชท</span>
+        <span class="count-pill" id="customer-count">{{ customers|length }} แชท</span>
       </div>
       <div class="customer-search">
         <label class="visually-hidden" for="customer-search-input">ค้นหาแชทลูกค้า</label>
         <input id="customer-search-input" type="search" value="{{ query or '' }}" placeholder="ค้นหา ID หรือข้อความในแชท">
       </div>
-      <div id="customer-list">
+      <div class="customer-list" id="customer-list">
         {% if customers %}
           {% for customer in customers %}
             <a class="customer-link {{ 'active' if customer.customer_id == selected_customer_id else '' }} {{ 'pinned' if customer.is_pinned else '' }}" data-customer-id="{{ customer.customer_id }}" href="{{ url_for('admin_customer_chats', customer_id=customer.customer_id, q=query) }}">
@@ -460,7 +550,7 @@
       </div>
     </aside>
 
-    <main class="chat">
+    <main class="pane chat">
       <div class="chat-head">
         <div class="chat-title">
           <h2 id="chat-title">{{ selected_customer_id or 'ยังไม่ได้เลือกแชท' }}</h2>
@@ -476,7 +566,7 @@
         </div>
       </div>
       <div class="offline-banner {{ '' if global_ai_enabled else 'show' }}" id="offline-banner">
-        น้องก้านออฟไลน์อยู่ ถ้าลูกค้าทักมา ระบบจะส่งข้อความมึนหัวให้อัตโนมัติ
+        น้องก้านออฟไลน์อยู่ ถ้าลูกค้าทักมา ระบบจะส่งข้อความอัตโนมัติให้ทันที
       </div>
       <div class="messages" id="customer-messages">
         {% if selected_customer_id %}
@@ -491,61 +581,92 @@
         {% endif %}
       </div>
       <div class="composer">
+        <div class="template-bar" id="template-bar"></div>
         <form method="post" action="{{ url_for('admin_send_customer_message') }}" id="customer-send-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
           <label class="visually-hidden" for="customer-message-input">พิมพ์ตอบลูกค้า</label>
-          <textarea name="message" id="customer-message-input" placeholder="พิมพ์ตอบลูกค้าด้วยตัวเอง" {% if not selected_customer_id %}disabled{% endif %}></textarea>
+          <textarea name="message" id="customer-message-input" placeholder="พิมพ์ตอบลูกค้าด้วยตัวเอง หรือเลือกเท็มเพลตด้านบน" {% if not selected_customer_id %}disabled{% endif %}></textarea>
           <button type="submit" id="customer-send-button" {% if not selected_customer_id %}disabled{% endif %}>ส่ง</button>
         </form>
       </div>
     </main>
 
-    <aside class="assistant">
+    <aside class="pane assistant">
       <div class="section-head">
         <div>
-          <h3>น้องใบ</h3>
-          <p class="last-message">AI หลังบ้าน รู้แชทลูกค้าและฐานความรู้</p>
+          <h3>ตั้งค่าและน้องใบ</h3>
+          <p class="last-message">จัดการเท็มเพลต ข้อความออฟไลน์ และถามหลังบ้าน</p>
         </div>
-        <form method="post" action="{{ url_for('admin_clear_nong_bai') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
-          <button class="ghost" type="submit">ล้าง</button>
-        </form>
       </div>
-      <div class="assistant-body" id="nong-bai-messages">
-        {% if nong_bai_messages %}
-          {% for item in nong_bai_messages %}
-            <div class="assistant-bubble {{ item.role }}">{{ item.text }}</div>
-          {% endfor %}
-        {% else %}
-          <div class="assistant-bubble bot">ถามน้องใบได้เลย เช่น “ลูกค้าชอบถามอะไร” หรือ “แชทนี้ควรตอบยังไงดี”</div>
-        {% endif %}
-      </div>
-      <div class="assistant-compose">
-        <form id="nong-bai-form" method="post" action="{{ url_for('admin_ask_nong_bai') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
-          <textarea name="question" id="nong-bai-question" placeholder="ถามน้องใบ..."></textarea>
-          <button type="submit" id="nong-bai-submit">ถามน้องใบ</button>
-        </form>
+      <div class="assistant-scroll">
+        <section class="tool-card">
+          <h3>ข้อความตอน AI ออฟไลน์</h3>
+          <form id="offline-message-form" method="post" action="{{ url_for('admin_update_offline_message') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
+            <textarea name="offline_message" id="offline-message-input" placeholder="ข้อความอัตโนมัติเมื่อ AI ถูกปิด">{{ offline_message }}</textarea>
+            <button type="submit" id="offline-message-submit">บันทึกข้อความ</button>
+          </form>
+        </section>
+
+        <section class="tool-card">
+          <h3>เท็มเพลตตอบลูกค้า</h3>
+          <form id="template-form" method="post" action="{{ url_for('admin_add_response_template') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input name="title" id="template-title-input" placeholder="ชื่อเท็มเพลต เช่น แจ้งรอเจ้าหน้าที่">
+            <textarea name="text" id="template-text-input" placeholder="ข้อความเท็มเพลต"></textarea>
+            <button type="submit" id="template-submit">เพิ่มเท็มเพลต</button>
+          </form>
+          <div class="template-list" id="template-list"></div>
+        </section>
+
+        <section class="tool-card">
+          <div style="display:flex; justify-content:space-between; gap:8px; align-items:center; margin-bottom:8px;">
+            <h3>น้องใบ</h3>
+            <form method="post" action="{{ url_for('admin_clear_nong_bai') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
+              <button class="ghost" type="submit">ล้าง</button>
+            </form>
+          </div>
+          <div class="assistant-body" id="nong-bai-messages">
+            {% if nong_bai_messages %}
+              {% for item in nong_bai_messages %}
+                <div class="assistant-bubble {{ item.role }}">{{ item.text }}</div>
+              {% endfor %}
+            {% else %}
+              <div class="assistant-bubble bot">ถามน้องใบได้เลย เช่น “ลูกค้าชอบถามอะไร” หรือ “แชทนี้ควรตอบยังไงดี”</div>
+            {% endif %}
+          </div>
+          <form id="nong-bai-form" method="post" action="{{ url_for('admin_ask_nong_bai') }}" style="display:grid; gap:8px; margin-top:10px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="customer_id" value="{{ selected_customer_id }}">
+            <textarea name="question" id="nong-bai-question" placeholder="ถามน้องใบ..."></textarea>
+            <button type="submit" id="nong-bai-submit">ถามน้องใบ</button>
+          </form>
+        </section>
       </div>
     </aside>
   </div>
 
   <script>
-    const csrfToken = "{{ csrf_token }}";
     const endpoints = {
       data: "{{ url_for('admin_customer_chats_data') }}",
       chats: "{{ url_for('admin_customer_chats') }}",
       toggleGlobal: "{{ url_for('admin_toggle_global_ai') }}",
       toggleCustomer: "{{ url_for('admin_toggle_customer_ai') }}",
+      updateOfflineMessage: "{{ url_for('admin_update_offline_message') }}",
+      addTemplate: "{{ url_for('admin_add_response_template') }}",
+      deleteTemplate: "{{ url_for('admin_delete_response_template') }}",
       send: "{{ url_for('admin_send_customer_message') }}",
     };
     const state = {
       selectedCustomerId: "{{ selected_customer_id }}",
       globalAiEnabled: {{ 'true' if global_ai_enabled else 'false' }},
       selectedAiEnabled: {{ 'true' if selected_ai_enabled else 'false' }},
+      offlineMessage: {{ offline_message|tojson }},
+      responseTemplates: {{ response_templates|tojson }},
       lastMessageFingerprint: "",
       isSending: false,
       searchQuery: "{{ query or '' }}",
@@ -569,6 +690,15 @@
     const customerSendForm = document.getElementById("customer-send-form");
     const customerInput = document.getElementById("customer-message-input");
     const customerSendButton = document.getElementById("customer-send-button");
+    const templateBar = document.getElementById("template-bar");
+    const templateList = document.getElementById("template-list");
+    const templateForm = document.getElementById("template-form");
+    const templateTitleInput = document.getElementById("template-title-input");
+    const templateTextInput = document.getElementById("template-text-input");
+    const templateSubmit = document.getElementById("template-submit");
+    const offlineMessageForm = document.getElementById("offline-message-form");
+    const offlineMessageInput = document.getElementById("offline-message-input");
+    const offlineMessageSubmit = document.getElementById("offline-message-submit");
     const baiCustomerInput = document.querySelector("#nong-bai-form input[name='customer_id']");
 
     function setMobilePanel(panel) {
@@ -586,10 +716,6 @@
     function formatTime(value) {
       if (!value) return "";
       return value.slice(0, 19).replace("T", " ");
-    }
-
-    function escapeText(value) {
-      return String(value || "");
     }
 
     function updateGlobalAi(enabled) {
@@ -617,6 +743,7 @@
       customerAiButton.classList.toggle("ghost", state.selectedAiEnabled);
       customerSendForm.querySelector("input[name='customer_id']").value = state.selectedCustomerId;
       globalAiForm.querySelector("input[name='customer_id']").value = state.selectedCustomerId;
+      offlineMessageForm.querySelector("input[name='customer_id']").value = state.selectedCustomerId;
       if (baiCustomerInput) baiCustomerInput.value = state.selectedCustomerId;
       customerInput.disabled = !state.selectedCustomerId;
       customerSendButton.disabled = !state.selectedCustomerId || state.isSending;
@@ -669,20 +796,61 @@
       messages.forEach((item) => {
         const bubble = document.createElement("div");
         bubble.className = `bubble ${item.role || ""}`;
-        bubble.textContent = escapeText(item.text);
+        bubble.textContent = String(item.text || "");
         const meta = document.createElement("div");
         meta.className = "bubble-meta";
         meta.textContent = `${item.role || "-"} · ${formatTime(item.created_at)}`;
         bubble.appendChild(meta);
         customerMessages.appendChild(bubble);
       });
-      if (shouldStickToBottom) {
-        customerMessages.scrollTop = customerMessages.scrollHeight;
+      if (shouldStickToBottom) customerMessages.scrollTop = customerMessages.scrollHeight;
+    }
+
+    function useTemplate(text) {
+      if (!state.selectedCustomerId) {
+        setMobilePanel("customers");
+        return;
       }
+      customerInput.value = text;
+      customerInput.focus();
+      setMobilePanel("chat");
+    }
+
+    function renderTemplates() {
+      templateBar.innerHTML = "";
+      templateList.innerHTML = "";
+      state.responseTemplates.forEach((template) => {
+        const pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "template-pill";
+        pill.textContent = template.title || "เท็มเพลต";
+        pill.addEventListener("click", () => useTemplate(template.text));
+        templateBar.appendChild(pill);
+
+        const item = document.createElement("div");
+        item.className = "template-item";
+        item.innerHTML = `
+          <strong></strong>
+          <p></p>
+          <div class="template-actions">
+            <button type="button" class="use-template">ใช้ข้อความ</button>
+            <button type="button" class="ghost delete-template">ลบ</button>
+          </div>
+        `;
+        item.querySelector("strong").textContent = template.title || "เท็มเพลต";
+        item.querySelector("p").textContent = template.text;
+        item.querySelector(".use-template").addEventListener("click", () => useTemplate(template.text));
+        item.querySelector(".delete-template").addEventListener("click", () => deleteTemplate(template.id));
+        templateList.appendChild(item);
+      });
     }
 
     function applyChatData(data) {
       updateGlobalAi(data.global_ai_enabled);
+      if (data.offline_message) {
+        state.offlineMessage = data.offline_message;
+        offlineMessageInput.value = data.offline_message;
+      }
       renderCustomers(data.customers || []);
       const selectedChat = data.selected_chat || {};
       updateCustomerControls(data.selected_customer_id || "", data.selected_ai_enabled);
@@ -695,9 +863,7 @@
       return fetch(url)
         .then((response) => response.json())
         .then(applyChatData)
-        .catch(() => {
-          liveStatus.textContent = "เชื่อมต่อข้อมูลสดไม่ได้ชั่วคราว";
-        });
+        .catch(() => { liveStatus.textContent = "เชื่อมต่อข้อมูลสดไม่ได้ชั่วคราว"; });
     }
 
     function selectCustomer(customerId) {
@@ -711,15 +877,29 @@
     function updateSearch(query) {
       state.searchQuery = query.trim();
       state.lastMessageFingerprint = "";
-      history.replaceState(
-        null,
-        "",
-        `${endpoints.chats}?customer_id=${encodeURIComponent(state.selectedCustomerId || "")}&q=${encodeURIComponent(state.searchQuery)}`
-      );
+      history.replaceState(null, "", `${endpoints.chats}?customer_id=${encodeURIComponent(state.selectedCustomerId || "")}&q=${encodeURIComponent(state.searchQuery)}`);
       fetchChatData();
     }
 
+    async function deleteTemplate(templateId) {
+      const formData = new FormData();
+      formData.set("csrf_token", "{{ csrf_token }}");
+      formData.set("template_id", templateId);
+      const response = await fetch(endpoints.deleteTemplate, {
+        method: "POST",
+        body: formData,
+        headers: { "X-Requested-With": "fetch" }
+      });
+      const data = await response.json();
+      if (data.templates) {
+        state.responseTemplates = data.templates;
+        renderTemplates();
+      }
+    }
+
     customerMessages.scrollTop = customerMessages.scrollHeight;
+    renderTemplates();
+
     customerList.querySelectorAll(".customer-link").forEach((link) => {
       link.addEventListener("click", (event) => {
         event.preventDefault();
@@ -736,11 +916,7 @@
       event.preventDefault();
       globalAiButton.disabled = true;
       const formData = new FormData(globalAiForm);
-      fetch(endpoints.toggleGlobal, {
-        method: "POST",
-        body: formData,
-        headers: { "X-Requested-With": "fetch" }
-      })
+      fetch(endpoints.toggleGlobal, { method: "POST", body: formData, headers: { "X-Requested-With": "fetch" } })
         .then((response) => response.json())
         .then((data) => updateGlobalAi(data.global_ai_enabled))
         .finally(() => {
@@ -754,16 +930,53 @@
       if (!state.selectedCustomerId) return;
       customerAiButton.disabled = true;
       const formData = new FormData(customerAiForm);
-      fetch(endpoints.toggleCustomer, {
-        method: "POST",
-        body: formData,
-        headers: { "X-Requested-With": "fetch" }
-      })
+      fetch(endpoints.toggleCustomer, { method: "POST", body: formData, headers: { "X-Requested-With": "fetch" } })
         .then((response) => response.json())
         .then((data) => updateCustomerControls(data.customer_id, data.ai_enabled))
         .finally(() => {
           customerAiButton.disabled = false;
           fetchChatData();
+        });
+    });
+
+    offlineMessageForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      offlineMessageSubmit.disabled = true;
+      offlineMessageSubmit.textContent = "กำลังบันทึก...";
+      const formData = new FormData(offlineMessageForm);
+      fetch(endpoints.updateOfflineMessage, { method: "POST", body: formData, headers: { "X-Requested-With": "fetch" } })
+        .then((response) => response.json())
+        .then((data) => {
+          offlineMessageInput.value = data.offline_message || offlineMessageInput.value;
+          liveStatus.textContent = "บันทึกข้อความออฟไลน์แล้ว";
+        })
+        .finally(() => {
+          offlineMessageSubmit.disabled = false;
+          offlineMessageSubmit.textContent = "บันทึกข้อความ";
+        });
+    });
+
+    templateForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const text = templateTextInput.value.trim();
+      if (!text) {
+        templateTextInput.focus();
+        return;
+      }
+      templateSubmit.disabled = true;
+      templateSubmit.textContent = "กำลังเพิ่ม...";
+      const formData = new FormData(templateForm);
+      fetch(endpoints.addTemplate, { method: "POST", body: formData, headers: { "X-Requested-With": "fetch" } })
+        .then((response) => response.json())
+        .then((data) => {
+          state.responseTemplates = data.templates || state.responseTemplates;
+          templateTitleInput.value = "";
+          templateTextInput.value = "";
+          renderTemplates();
+        })
+        .finally(() => {
+          templateSubmit.disabled = false;
+          templateSubmit.textContent = "เพิ่มเท็มเพลต";
         });
     });
 
@@ -779,22 +992,17 @@
       customerSendButton.textContent = "กำลังส่ง...";
       const formData = new FormData(customerSendForm);
       formData.set("message", text);
-      fetch(endpoints.send, {
-        method: "POST",
-        body: formData,
-        headers: { "X-Requested-With": "fetch" }
-      })
+      fetch(endpoints.send, { method: "POST", body: formData, headers: { "X-Requested-With": "fetch" } })
         .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
         .then(({ ok, data }) => {
           if (!ok) throw new Error(data.message || "ส่งข้อความไม่สำเร็จ");
           customerInput.value = "";
+          updateCustomerControls(state.selectedCustomerId, data.selected_ai_enabled);
           state.lastMessageFingerprint = "";
           renderMessages((data.selected_chat && data.selected_chat.messages) || []);
           fetchChatData();
         })
-        .catch((error) => {
-          liveStatus.textContent = error.message || "ส่งข้อความไม่สำเร็จ";
-        })
+        .catch((error) => { liveStatus.textContent = error.message || "ส่งข้อความไม่สำเร็จ"; })
         .finally(() => {
           state.isSending = false;
           customerSendButton.disabled = !state.selectedCustomerId;
@@ -831,21 +1039,12 @@
       baiQuestion.value = "";
       baiSubmit.disabled = true;
       baiSubmit.textContent = "กำลังตอบ...";
-
       const formData = new FormData(baiForm);
       formData.set("question", question);
-      fetch(baiForm.action, {
-        method: "POST",
-        body: formData,
-        headers: { "X-Requested-With": "fetch" }
-      })
+      fetch(baiForm.action, { method: "POST", body: formData, headers: { "X-Requested-With": "fetch" } })
         .then((response) => response.json())
-        .then((data) => {
-          loading.textContent = data.answer || "น้องใบตอบไม่ได้ค่ะ";
-        })
-        .catch(() => {
-          loading.textContent = "น้องใบสะดุดค่ะ ลองถามใหม่อีกครั้งนะคะ";
-        })
+        .then((data) => { loading.textContent = data.answer || "น้องใบตอบไม่ได้ค่ะ"; })
+        .catch(() => { loading.textContent = "น้องใบสะดุดค่ะ ลองถามใหม่อีกครั้งนะคะ"; })
         .finally(() => {
           baiSubmit.disabled = false;
           baiSubmit.textContent = "ถามน้องใบ";

@@ -65,6 +65,7 @@ DATA_DIR=.
 TRAINING_HISTORY_PATH=training_history.json
 CUSTOMER_CHATS_PATH=customer_chats.json
 CUSTOMER_AI_SETTINGS_PATH=customer_ai_settings.json
+RESPONSE_TEMPLATES_PATH=response_templates.json
 ADMIN_PASSWORD=change_this_to_a_strong_password
 SECRET_KEY=change_this_to_a_long_random_secret
 ```
@@ -155,7 +156,7 @@ AI_TIMEOUT_SECONDS=20
 LOG_LEVEL=INFO
 ```
 
-8. สร้าง Railway Volume แล้ว mount ที่ `/data` เพื่อเก็บแชทลูกค้า ประวัติเทรน และฐานความรู้ที่แก้จากหน้า Admin ให้ไม่หายตอน redeploy
+8. สร้าง Railway Volume แล้ว mount ที่ `/data` เพื่อเก็บแชทลูกค้า ประวัติเทรน เท็มเพลตตอบลูกค้า และฐานความรู้ที่แก้จากหน้า Admin ให้ไม่หายตอน redeploy
 9. Deploy
 10. เปิด public domain ของ Railway
 11. ทดสอบ health check ที่:
@@ -183,7 +184,7 @@ https://your-railway-domain.up.railway.app/admin
 
 ค่า secrets เช่น `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, `OPENROUTER_API_KEY`, `AI_MODEL` และ `SECRET_KEY` ให้แก้ใน Railway Environment Variables ไม่ควรแก้ผ่านหน้าเว็บ
 
-หมายเหตุ: ถ้าใช้งานบน Railway ให้ตั้ง `DATA_DIR=/data` และต้องมี Railway Volume ที่ mount `/data` ไม่อย่างนั้นข้อมูลแชทที่เก็บเป็นไฟล์ JSON อาจหายหลัง redeploy/restart ได้
+หมายเหตุ: ถ้าใช้งานบน Railway ให้ตั้ง `DATA_DIR=/data` และต้องมี Railway Volume ที่ mount `/data` ไม่อย่างนั้นข้อมูลที่เก็บเป็นไฟล์ JSON เช่น แชท ประวัติเทรน เท็มเพลต และข้อความออฟไลน์ อาจหายหลัง redeploy/restart ได้
 
 ## ตั้ง Webhook URL ใน LINE
 
@@ -237,6 +238,9 @@ AI_MODEL=google/gemini-flash-1.5
 - หน้า `แชทลูกค้า` ดึงข้อมูลใหม่เองแบบเรียลไทม์ และแอดมินส่งข้อความได้โดยไม่ต้องรีเฟรชหน้า
 - แชทที่ปิด AI รายลูกค้าจะถูกปักหมุดไว้บนสุด และในกลุ่มเดียวกันจะเรียงแชทใหม่สุดก่อน
 - ช่องค้นหาในหน้า `แชทลูกค้า` ค้นได้ทั้ง ID ลูกค้าและข้อความที่อยู่ในประวัติแชท
+- แอดมินตอบลูกค้าสำเร็จแล้ว ระบบจะปิด AI ของแชทนั้นให้อัตโนมัติ
+- เพิ่ม/ลบเท็มเพลตตอบลูกค้าได้จากหน้า `แชทลูกค้า`; เมื่อกดใช้ เท็มเพลตจะถูกใส่ในช่องพิมพ์แต่ยังไม่ส่งทันที
+- ข้อความอัตโนมัติเวลา AI ออฟไลน์แก้ได้จากหน้า `แชทลูกค้า`
 
 ## การทดสอบสำคัญ
 
