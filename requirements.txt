@@ -1,4 +1,7 @@
 Flask==3.0.3
+Flask-SocketIO==5.3.6
 gunicorn==22.0.0
+psycopg[binary]==3.2.9
 python-dotenv==1.0.1
 requests==2.32.3
+simple-websocket==1.1.0

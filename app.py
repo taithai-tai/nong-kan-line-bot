@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 import shutil
+import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,12 +24,14 @@ from flask import (
     session,
     url_for,
 )
+from flask_socketio import SocketIO
 
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
+socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,7 @@ AI_API_BASE_URL = os.getenv("AI_API_BASE_URL", "https://openrouter.ai/api/v1").r
 AI_MODEL = os.getenv("AI_MODEL", "openrouter/auto")
 APP_NAME = os.getenv("APP_NAME", "nong-kan-line-bot")
 APP_URL = os.getenv("APP_URL", "")
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "")).expanduser() if os.getenv("DATA_DIR") else None
 
@@ -58,6 +62,7 @@ TRAINING_HISTORY_PATH = resolve_storage_path("TRAINING_HISTORY_PATH", "training_
 CUSTOMER_CHATS_PATH = resolve_storage_path("CUSTOMER_CHATS_PATH", "customer_chats.json")
 CUSTOMER_AI_SETTINGS_PATH = resolve_storage_path("CUSTOMER_AI_SETTINGS_PATH", "customer_ai_settings.json")
 RESPONSE_TEMPLATES_PATH = resolve_storage_path("RESPONSE_TEMPLATES_PATH", "response_templates.json")
+SQLITE_DATABASE_PATH = resolve_storage_path("SQLITE_DATABASE_PATH", "nong_kan.sqlite3")
 AI_TIMEOUT_SECONDS = int(os.getenv("AI_TIMEOUT_SECONDS", "20"))
 AI_TRAINING_TIMEOUT_SECONDS = int(os.getenv("AI_TRAINING_TIMEOUT_SECONDS", "45"))
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
@@ -90,6 +95,130 @@ DEFAULT_RESPONSE_TEMPLATES = [
         "created_at": "2026-06-08T00:00:00+00:00",
     },
 ]
+
+
+def uses_postgres() -> bool:
+    return DATABASE_URL.startswith(("postgres://", "postgresql://"))
+
+
+def sql_placeholders(sql: str) -> str:
+    return sql.replace("?", "%s") if uses_postgres() else sql
+
+
+def get_db_connection():
+    if uses_postgres():
+        import psycopg
+        from psycopg.rows import dict_row
+
+        return psycopg.connect(DATABASE_URL, autocommit=True, row_factory=dict_row)
+
+    SQLITE_DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(SQLITE_DATABASE_PATH)
+    connection.row_factory = sqlite3.Row
+    return connection
+
+
+def db_execute(sql: str, params: tuple = (), *, fetch: str = ""):
+    with get_db_connection() as connection:
+        cursor = connection.cursor()
+        cursor.execute(sql_placeholders(sql), params)
+        if not uses_postgres():
+            connection.commit()
+        if fetch == "one":
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        if fetch == "all":
+            return [dict(row) for row in cursor.fetchall()]
+    return None
+
+
+def init_database() -> None:
+    statements = [
+        """
+        CREATE TABLE IF NOT EXISTS app_settings (
+            scope TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (scope, key)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS knowledge_base_store (
+            id INTEGER PRIMARY KEY,
+            data TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS customer_chats (
+            customer_id TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS customer_messages (
+            id TEXT PRIMARY KEY,
+            customer_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            text TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_customer_messages_customer_created ON customer_messages (customer_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_customer_chats_updated ON customer_chats (updated_at)",
+        """
+        CREATE TABLE IF NOT EXISTS training_history (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            instruction TEXT NOT NULL,
+            result_message TEXT NOT NULL,
+            status TEXT NOT NULL,
+            before_snapshot TEXT,
+            after_snapshot TEXT,
+            reverted INTEGER NOT NULL DEFAULT 0,
+            reverted_at TEXT
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_training_history_created ON training_history (created_at)",
+        """
+        CREATE TABLE IF NOT EXISTS response_templates (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            text TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS broadcast_history (
+            id TEXT PRIMARY KEY,
+            message TEXT NOT NULL,
+            target_mode TEXT NOT NULL,
+            target_query TEXT,
+            sent_count INTEGER NOT NULL,
+            failed_count INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """,
+    ]
+    for statement in statements:
+        db_execute(statement)
+
+
+def json_dumps(data) -> str:
+    return json.dumps(data, ensure_ascii=False)
+
+
+def json_loads(value: str, fallback):
+    if value in (None, ""):
+        return fallback
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        logger.exception("Stored JSON is invalid.")
+        return fallback
 
 
 def is_admin_logged_in() -> bool:
@@ -129,21 +258,26 @@ def bootstrap_storage_file(path: Path, seed_path: Path) -> None:
 
 
 def load_knowledge_base() -> dict:
-    bootstrap_storage_file(KNOWLEDGE_BASE_PATH, Path("knowledge_base.json"))
-    if not KNOWLEDGE_BASE_PATH.exists():
-        logger.warning("Knowledge base file not found: %s", KNOWLEDGE_BASE_PATH)
-        return {}
+    row = db_execute("SELECT data FROM knowledge_base_store WHERE id = 1", fetch="one")
+    if row:
+        return json_loads(row["data"], {})
 
-    try:
-        return json.loads(KNOWLEDGE_BASE_PATH.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        logger.exception("Knowledge base JSON is invalid.")
-        return {}
+    seed = {}
+    if KNOWLEDGE_BASE_PATH.exists():
+        seed = json_loads(KNOWLEDGE_BASE_PATH.read_text(encoding="utf-8"), {})
+    save_knowledge_base(seed)
+    return seed
 
 
 def save_knowledge_base(knowledge_base: dict) -> None:
-    formatted_json = json.dumps(knowledge_base, ensure_ascii=False, indent=2)
-    write_text_file_safely(KNOWLEDGE_BASE_PATH, formatted_json + "\n")
+    db_execute(
+        """
+        INSERT INTO knowledge_base_store (id, data, updated_at)
+        VALUES (1, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
+        """,
+        (json_dumps(knowledge_base), utc_now_iso()),
+    )
 
 
 def utc_now_iso() -> str:
@@ -178,133 +312,273 @@ def write_text_file_safely(path: Path, text: str) -> None:
 
 
 def load_customer_chats() -> dict:
-    data = load_json_file(CUSTOMER_CHATS_PATH, {})
-    return data if isinstance(data, dict) else {}
+    chats = {}
+    chat_rows = db_execute(
+        "SELECT customer_id, display_name, created_at, updated_at FROM customer_chats",
+        fetch="all",
+    )
+    message_rows = db_execute(
+        "SELECT id, customer_id, role, text, created_at FROM customer_messages ORDER BY created_at ASC",
+        fetch="all",
+    )
+    for row in chat_rows:
+        chats[row["customer_id"]] = {
+            "customer_id": row["customer_id"],
+            "display_name": row["display_name"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "messages": [],
+        }
+    for row in message_rows:
+        customer_id = row["customer_id"]
+        chat = chats.setdefault(
+            customer_id,
+            {
+                "customer_id": customer_id,
+                "display_name": customer_id,
+                "created_at": row["created_at"],
+                "updated_at": row["created_at"],
+                "messages": [],
+            },
+        )
+        chat["messages"].append(
+            {
+                "id": row["id"],
+                "role": row["role"],
+                "text": row["text"],
+                "created_at": row["created_at"],
+            }
+        )
+    return chats
 
 
 def save_customer_chats(chats: dict) -> None:
-    save_json_file(CUSTOMER_CHATS_PATH, chats)
+    db_execute("DELETE FROM customer_messages")
+    db_execute("DELETE FROM customer_chats")
+    for customer_id, chat in chats.items():
+        db_execute(
+            """
+            INSERT INTO customer_chats (customer_id, display_name, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                customer_id,
+                chat.get("display_name") or customer_id,
+                chat.get("created_at") or utc_now_iso(),
+                chat.get("updated_at") or utc_now_iso(),
+            ),
+        )
+        for message in chat.get("messages", []):
+            db_execute(
+                """
+                INSERT INTO customer_messages (id, customer_id, role, text, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    message.get("id") or uuid.uuid4().hex,
+                    customer_id,
+                    message.get("role", ""),
+                    message.get("text", ""),
+                    message.get("created_at") or utc_now_iso(),
+                ),
+            )
 
 
 def load_customer_ai_settings() -> dict:
-    data = load_json_file(CUSTOMER_AI_SETTINGS_PATH, {})
-    return data if isinstance(data, dict) else {}
+    settings = {}
+    rows = db_execute(
+        "SELECT scope, key, value, updated_at FROM app_settings WHERE scope IN ('global', 'customer_ai')",
+        fetch="all",
+    )
+    for row in rows:
+        if row["scope"] == "global":
+            settings.setdefault("__global__", {})[row["key"]] = json_loads(row["value"], row["value"])
+            settings["__global__"]["updated_at"] = row["updated_at"]
+        if row["scope"] == "customer_ai":
+            settings.setdefault(row["key"], {})["ai_enabled"] = bool(json_loads(row["value"], True))
+            settings[row["key"]]["updated_at"] = row["updated_at"]
+    return settings
 
 
 def save_customer_ai_settings(settings: dict) -> None:
-    save_json_file(CUSTOMER_AI_SETTINGS_PATH, settings)
+    db_execute("DELETE FROM app_settings WHERE scope IN ('global', 'customer_ai')")
+    global_settings = settings.get("__global__", {})
+    for key, value in global_settings.items():
+        if key == "updated_at":
+            continue
+        db_execute(
+            """
+            INSERT INTO app_settings (scope, key, value, updated_at)
+            VALUES ('global', ?, ?, ?)
+            ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """,
+            (key, json_dumps(value), global_settings.get("updated_at") or utc_now_iso()),
+        )
+    for customer_id, customer_settings in settings.items():
+        if customer_id == "__global__":
+            continue
+        db_execute(
+            """
+            INSERT INTO app_settings (scope, key, value, updated_at)
+            VALUES ('customer_ai', ?, ?, ?)
+            ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """,
+            (
+                customer_id,
+                json_dumps(customer_settings.get("ai_enabled", True)),
+                customer_settings.get("updated_at") or utc_now_iso(),
+            ),
+        )
 
 
 def get_ai_unavailable_message() -> str:
-    settings = load_customer_ai_settings()
-    message = settings.get("__global__", {}).get("offline_message", "").strip()
+    row = db_execute(
+        "SELECT value FROM app_settings WHERE scope = 'global' AND key = 'offline_message'",
+        fetch="one",
+    )
+    message = str(json_loads(row["value"], "")).strip() if row else ""
     return message or AI_UNAVAILABLE_MESSAGE
 
 
 def set_ai_unavailable_message(message: str) -> None:
-    settings = load_customer_ai_settings()
-    settings.setdefault("__global__", {})["offline_message"] = message.strip() or AI_UNAVAILABLE_MESSAGE
-    settings["__global__"]["updated_at"] = utc_now_iso()
-    save_customer_ai_settings(settings)
+    db_execute(
+        """
+        INSERT INTO app_settings (scope, key, value, updated_at)
+        VALUES ('global', 'offline_message', ?, ?)
+        ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        """,
+        (json_dumps(message.strip() or AI_UNAVAILABLE_MESSAGE), utc_now_iso()),
+    )
+    socketio.emit("settings_updated", {"type": "offline_message"})
 
 
 def is_customer_ai_enabled(customer_id: str) -> bool:
-    settings = load_customer_ai_settings()
-    return settings.get(customer_id, {}).get("ai_enabled", True)
+    row = db_execute(
+        "SELECT value FROM app_settings WHERE scope = 'customer_ai' AND key = ?",
+        (customer_id,),
+        fetch="one",
+    )
+    return bool(json_loads(row["value"], True)) if row else True
 
 
 def is_global_ai_enabled() -> bool:
-    settings = load_customer_ai_settings()
-    return settings.get("__global__", {}).get("ai_enabled", True)
+    row = db_execute(
+        "SELECT value FROM app_settings WHERE scope = 'global' AND key = 'ai_enabled'",
+        fetch="one",
+    )
+    return bool(json_loads(row["value"], True)) if row else True
 
 
 def set_global_ai_enabled(enabled: bool) -> None:
-    settings = load_customer_ai_settings()
-    settings.setdefault("__global__", {})["ai_enabled"] = enabled
-    settings["__global__"]["updated_at"] = utc_now_iso()
-    save_customer_ai_settings(settings)
+    db_execute(
+        """
+        INSERT INTO app_settings (scope, key, value, updated_at)
+        VALUES ('global', 'ai_enabled', ?, ?)
+        ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        """,
+        (json_dumps(enabled), utc_now_iso()),
+    )
+    socketio.emit("settings_updated", {"type": "global_ai", "global_ai_enabled": enabled})
 
 
 def set_customer_ai_enabled(customer_id: str, enabled: bool) -> None:
-    settings = load_customer_ai_settings()
-    settings.setdefault(customer_id, {})["ai_enabled"] = enabled
-    settings[customer_id]["updated_at"] = utc_now_iso()
-    save_customer_ai_settings(settings)
+    db_execute(
+        """
+        INSERT INTO app_settings (scope, key, value, updated_at)
+        VALUES ('customer_ai', ?, ?, ?)
+        ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        """,
+        (customer_id, json_dumps(enabled), utc_now_iso()),
+    )
+    socketio.emit(
+        "chat_updated",
+        {"customer_id": customer_id, "reason": "customer_ai", "ai_enabled": enabled},
+    )
 
 
 def append_customer_message(customer_id: str, role: str, text: str) -> None:
     if not customer_id:
         return
 
-    chats = load_customer_chats()
-    chat = chats.setdefault(
-        customer_id,
-        {
-            "customer_id": customer_id,
-            "display_name": customer_id,
-            "messages": [],
-            "created_at": utc_now_iso(),
-            "updated_at": utc_now_iso(),
-        },
+    now = utc_now_iso()
+    db_execute(
+        """
+        INSERT INTO customer_chats (customer_id, display_name, created_at, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(customer_id) DO UPDATE SET updated_at = excluded.updated_at
+        """,
+        (customer_id, customer_id, now, now),
     )
-    chat["display_name"] = chat.get("display_name") or customer_id
-    chat["updated_at"] = utc_now_iso()
-    chat.setdefault("messages", []).append(
-        {
-            "id": uuid.uuid4().hex,
-            "role": role,
-            "text": text,
-            "created_at": utc_now_iso(),
-        }
+    db_execute(
+        """
+        INSERT INTO customer_messages (id, customer_id, role, text, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (uuid.uuid4().hex, customer_id, role, text, now),
     )
-    save_customer_chats(chats)
+    socketio.emit("chat_updated", {"customer_id": customer_id, "reason": "message"})
 
 
 def load_response_templates() -> list[dict]:
-    data = load_json_file(RESPONSE_TEMPLATES_PATH, DEFAULT_RESPONSE_TEMPLATES)
-    if not isinstance(data, list):
-        return DEFAULT_RESPONSE_TEMPLATES
-    templates = []
-    for item in data:
-        if not isinstance(item, dict):
-            continue
-        text = str(item.get("text", "")).strip()
-        if not text:
-            continue
-        templates.append(
-            {
-                "id": str(item.get("id") or uuid.uuid4().hex),
-                "title": str(item.get("title") or text[:40]),
-                "text": text,
-                "created_at": str(item.get("created_at") or utc_now_iso()),
-            }
-        )
-    return templates
+    rows = db_execute(
+        "SELECT id, title, text, created_at FROM response_templates ORDER BY created_at ASC",
+        fetch="all",
+    )
+    if rows:
+        return rows
+
+    save_response_templates(DEFAULT_RESPONSE_TEMPLATES)
+    return DEFAULT_RESPONSE_TEMPLATES
 
 
 def save_response_templates(templates: list[dict]) -> None:
-    save_json_file(RESPONSE_TEMPLATES_PATH, templates)
+    db_execute("DELETE FROM response_templates")
+    for item in templates:
+        text = str(item.get("text", "")).strip()
+        if not text:
+            continue
+        db_execute(
+            """
+            INSERT INTO response_templates (id, title, text, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                str(item.get("id") or uuid.uuid4().hex),
+                str(item.get("title") or text[:40]),
+                text,
+                str(item.get("created_at") or utc_now_iso()),
+            ),
+        )
 
 
 def add_response_template(title: str, text: str) -> dict:
-    templates = load_response_templates()
     template = {
         "id": uuid.uuid4().hex,
         "title": title.strip() or text.strip()[:40],
         "text": text.strip(),
         "created_at": utc_now_iso(),
     }
-    templates.append(template)
-    save_response_templates(templates)
+    db_execute(
+        """
+        INSERT INTO response_templates (id, title, text, created_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (template["id"], template["title"], template["text"], template["created_at"]),
+    )
+    socketio.emit("templates_updated", {"type": "created"})
     return template
 
 
 def delete_response_template(template_id: str) -> bool:
-    templates = load_response_templates()
-    next_templates = [item for item in templates if item.get("id") != template_id]
-    if len(next_templates) == len(templates):
+    row = db_execute(
+        "SELECT id FROM response_templates WHERE id = ?",
+        (template_id,),
+        fetch="one",
+    )
+    if not row:
         return False
-    save_response_templates(next_templates)
+    db_execute("DELETE FROM response_templates WHERE id = ?", (template_id,))
+    socketio.emit("templates_updated", {"type": "deleted"})
     return True
 
 
@@ -364,22 +638,168 @@ def sort_customer_summaries(customers: list[dict]) -> list[dict]:
     return customers
 
 
-def load_training_history() -> list[dict]:
-    if not TRAINING_HISTORY_PATH.exists():
-        return []
+def get_broadcast_recipients(mode: str, query: str, selected_ids: list[str]) -> list[str]:
+    chats = load_customer_chats()
+    if mode == "selected":
+        return [customer_id for customer_id in selected_ids if customer_id in chats]
+    if mode == "search":
+        return [
+            customer_id
+            for customer_id, chat in chats.items()
+            if chat_matches_query(customer_id, chat, query)
+        ]
+    return list(chats.keys())
 
+
+def save_broadcast_history(
+    *, message: str, target_mode: str, target_query: str, sent_count: int, failed_count: int
+) -> None:
+    db_execute(
+        """
+        INSERT INTO broadcast_history (
+            id, message, target_mode, target_query, sent_count, failed_count, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            uuid.uuid4().hex,
+            message,
+            target_mode,
+            target_query,
+            sent_count,
+            failed_count,
+            utc_now_iso(),
+        ),
+    )
+
+
+def calculate_admin_analytics() -> dict:
+    chats = load_customer_chats()
+    messages = []
+    for customer_id, chat in chats.items():
+        for message in chat.get("messages", []):
+            messages.append({**message, "customer_id": customer_id})
+    messages.sort(key=lambda item: item.get("created_at", ""))
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    active_today = {
+        item["customer_id"]
+        for item in messages
+        if item.get("role") == "customer" and item.get("created_at", "").startswith(today)
+    }
+    customer_messages_today = [
+        item
+        for item in messages
+        if item.get("role") == "customer" and item.get("created_at", "").startswith(today)
+    ]
+
+    response_seconds = []
+    for customer_id, chat in chats.items():
+        chat_messages = sorted(chat.get("messages", []), key=lambda item: item.get("created_at", ""))
+        for index, message in enumerate(chat_messages):
+            if message.get("role") != "customer":
+                continue
+            customer_time = parse_iso_datetime(message.get("created_at", ""))
+            if customer_time is None:
+                continue
+            for candidate in chat_messages[index + 1 :]:
+                if candidate.get("role") not in {"nong_kan", "admin"}:
+                    continue
+                response_time = parse_iso_datetime(candidate.get("created_at", ""))
+                if response_time is not None:
+                    response_seconds.append(max(0, (response_time - customer_time).total_seconds()))
+                break
+
+    bot_answers = [item for item in messages if item.get("role") == "nong_kan"]
+    bot_successes = [
+        item
+        for item in bot_answers
+        if not is_low_information_answer(item.get("text", ""))
+        and item.get("text", "").strip() != get_ai_unavailable_message()
+    ]
+    recent_broadcasts = db_execute(
+        """
+        SELECT id, message, target_mode, target_query, sent_count, failed_count, created_at
+        FROM broadcast_history
+        ORDER BY created_at DESC
+        LIMIT 10
+        """,
+        fetch="all",
+    )
+    return {
+        "total_customers": len(chats),
+        "active_users_today": len(active_today),
+        "customer_messages_today": len(customer_messages_today),
+        "average_response_seconds": round(sum(response_seconds) / len(response_seconds), 1)
+        if response_seconds
+        else 0,
+        "bot_success_rate": round((len(bot_successes) / len(bot_answers)) * 100, 1)
+        if bot_answers
+        else 0,
+        "recent_broadcasts": recent_broadcasts,
+    }
+
+
+def parse_iso_datetime(value: str) -> Optional[datetime]:
+    if not value:
+        return None
     try:
-        history = json.loads(TRAINING_HISTORY_PATH.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        logger.exception("Training history JSON is invalid.")
-        return []
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
-    return history if isinstance(history, list) else []
+
+def load_training_history() -> list[dict]:
+    rows = db_execute(
+        """
+        SELECT id, created_at, instruction, result_message, status, before_snapshot,
+               after_snapshot, reverted, reverted_at
+        FROM training_history
+        ORDER BY created_at ASC
+        """,
+        fetch="all",
+    )
+    history = []
+    for row in rows:
+        history.append(
+            {
+                "id": row["id"],
+                "created_at": row["created_at"],
+                "instruction": row["instruction"],
+                "result_message": row["result_message"],
+                "status": row["status"],
+                "before_snapshot": json_loads(row["before_snapshot"], None),
+                "after_snapshot": json_loads(row["after_snapshot"], None),
+                "reverted": bool(row["reverted"]),
+                "reverted_at": row.get("reverted_at"),
+            }
+        )
+    return history
 
 
 def save_training_history(history: list[dict]) -> None:
-    formatted_json = json.dumps(history, ensure_ascii=False, indent=2)
-    write_text_file_safely(TRAINING_HISTORY_PATH, formatted_json + "\n")
+    db_execute("DELETE FROM training_history")
+    for entry in history:
+        db_execute(
+            """
+            INSERT INTO training_history (
+                id, created_at, instruction, result_message, status, before_snapshot,
+                after_snapshot, reverted, reverted_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry.get("id") or uuid.uuid4().hex,
+                entry.get("created_at") or utc_now_iso(),
+                entry.get("instruction", ""),
+                entry.get("result_message", ""),
+                entry.get("status", ""),
+                json_dumps(entry.get("before_snapshot")) if entry.get("before_snapshot") is not None else None,
+                json_dumps(entry.get("after_snapshot")) if entry.get("after_snapshot") is not None else None,
+                1 if entry.get("reverted") else 0,
+                entry.get("reverted_at"),
+            ),
+        )
 
 
 def add_training_history_entry(
@@ -390,7 +810,6 @@ def add_training_history_entry(
     before_snapshot: Optional[dict] = None,
     after_snapshot: Optional[dict] = None,
 ) -> dict:
-    history = load_training_history()
     entry = {
         "id": uuid.uuid4().hex,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -401,24 +820,52 @@ def add_training_history_entry(
         "after_snapshot": after_snapshot,
         "reverted": False,
     }
-    history.append(entry)
-    save_training_history(history)
+    db_execute(
+        """
+        INSERT INTO training_history (
+            id, created_at, instruction, result_message, status, before_snapshot,
+            after_snapshot, reverted, reverted_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL)
+        """,
+        (
+            entry["id"],
+            entry["created_at"],
+            entry["instruction"],
+            entry["result_message"],
+            entry["status"],
+            json_dumps(before_snapshot) if before_snapshot is not None else None,
+            json_dumps(after_snapshot) if after_snapshot is not None else None,
+        ),
+    )
     return entry
 
 
 def update_training_history_entry(entry_id: str, **updates) -> Optional[dict]:
-    history = load_training_history()
-    updated_entry = None
-    for entry in history:
-        if entry.get("id") != entry_id:
-            continue
-        entry.update(updates)
-        updated_entry = entry
-        break
+    row = db_execute("SELECT id FROM training_history WHERE id = ?", (entry_id,), fetch="one")
+    if row is None:
+        return None
 
-    if updated_entry is not None:
-        save_training_history(history)
-    return updated_entry
+    allowed_columns = {
+        "result_message",
+        "status",
+        "before_snapshot",
+        "after_snapshot",
+        "reverted",
+        "reverted_at",
+    }
+    for key, value in updates.items():
+        if key not in allowed_columns:
+            continue
+        stored_value = value
+        if key in {"before_snapshot", "after_snapshot"}:
+            stored_value = json_dumps(value) if value is not None else None
+        if key == "reverted":
+            stored_value = 1 if value else 0
+        db_execute(f"UPDATE training_history SET {key} = ? WHERE id = ?", (stored_value, entry_id))
+
+    history = load_training_history()
+    return next((entry for entry in history if entry.get("id") == entry_id), None)
 
 
 def public_training_history_entry(entry: dict) -> dict:
@@ -453,11 +900,10 @@ def training_history_to_messages(history: list[dict]) -> list[dict]:
 
 
 def delete_training_history_entry(entry_id: str) -> bool:
-    history = load_training_history()
-    next_history = [entry for entry in history if entry.get("id") != entry_id]
-    if len(next_history) == len(history):
+    row = db_execute("SELECT id FROM training_history WHERE id = ?", (entry_id,), fetch="one")
+    if not row:
         return False
-    save_training_history(next_history)
+    db_execute("DELETE FROM training_history WHERE id = ?", (entry_id,))
     return True
 
 
@@ -477,6 +923,48 @@ def revert_training_history_entry(entry_id: str) -> bool:
         save_training_history(history)
         return True
     return False
+
+
+def table_row_count(table_name: str) -> int:
+    row = db_execute(f"SELECT COUNT(*) AS count FROM {table_name}", fetch="one")
+    return int(row["count"]) if row else 0
+
+
+def load_json_path(path: Path, fallback):
+    if not path.exists():
+        return fallback
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        logger.exception("Could not migrate invalid JSON file: %s", path)
+        return fallback
+
+
+def migrate_json_files_to_database() -> None:
+    if table_row_count("knowledge_base_store") == 0 and KNOWLEDGE_BASE_PATH.exists():
+        knowledge_base = load_json_path(KNOWLEDGE_BASE_PATH, {})
+        if isinstance(knowledge_base, dict):
+            save_knowledge_base(knowledge_base)
+
+    if table_row_count("customer_chats") == 0 and CUSTOMER_CHATS_PATH.exists():
+        chats = load_json_path(CUSTOMER_CHATS_PATH, {})
+        if isinstance(chats, dict):
+            save_customer_chats(chats)
+
+    if table_row_count("app_settings") == 0 and CUSTOMER_AI_SETTINGS_PATH.exists():
+        settings = load_json_path(CUSTOMER_AI_SETTINGS_PATH, {})
+        if isinstance(settings, dict):
+            save_customer_ai_settings(settings)
+
+    if table_row_count("training_history") == 0 and TRAINING_HISTORY_PATH.exists():
+        history = load_json_path(TRAINING_HISTORY_PATH, [])
+        if isinstance(history, list):
+            save_training_history(history)
+
+    if table_row_count("response_templates") == 0 and RESPONSE_TEMPLATES_PATH.exists():
+        templates = load_json_path(RESPONSE_TEMPLATES_PATH, [])
+        if isinstance(templates, list):
+            save_response_templates(templates)
 
 
 def extract_json_object(text: str) -> dict:
@@ -1091,6 +1579,7 @@ def admin_customer_chats():
         global_ai_enabled=is_global_ai_enabled(),
         offline_message=get_ai_unavailable_message(),
         response_templates=load_response_templates(),
+        analytics=calculate_admin_analytics(),
         nong_bai_messages=session.get("nong_bai_messages", []),
         message=request.args.get("message", ""),
         query=query,
@@ -1127,9 +1616,17 @@ def admin_customer_chats_data():
             "selected_ai_enabled": settings.get(selected_customer_id, {}).get("ai_enabled", True),
             "global_ai_enabled": is_global_ai_enabled(),
             "offline_message": get_ai_unavailable_message(),
+            "response_templates": load_response_templates(),
+            "analytics": calculate_admin_analytics(),
             "query": query,
         }
     )
+
+
+@app.get("/admin/analytics/data")
+def admin_analytics_data():
+    require_admin()
+    return jsonify({"ok": True, "analytics": calculate_admin_analytics()})
 
 
 @app.post("/admin/chats/toggle-ai")
@@ -1198,6 +1695,50 @@ def admin_delete_response_template():
     if request.headers.get("X-Requested-With") == "fetch":
         return jsonify({"ok": deleted, "templates": load_response_templates()})
     return redirect(url_for("admin_customer_chats", message="ลบเท็มเพลตแล้วค่ะ" if deleted else "ไม่พบเท็มเพลตค่ะ"))
+
+
+@app.post("/admin/broadcast")
+def admin_broadcast():
+    require_admin()
+    verify_csrf_token()
+
+    message = request.form.get("message", "").strip()
+    mode = request.form.get("target_mode", "all").strip()
+    query = request.form.get("target_query", "").strip()
+    selected_ids = [
+        item.strip()
+        for item in request.form.get("customer_ids", "").replace("\n", ",").split(",")
+        if item.strip()
+    ]
+    if not message:
+        return jsonify({"ok": False, "message": "กรุณาใส่ข้อความ Broadcast ก่อนค่ะ"}), 400
+
+    recipients = get_broadcast_recipients(mode, query, selected_ids)
+    sent_count = 0
+    failed_count = 0
+    for customer_id in recipients:
+        if push_to_line(customer_id, message):
+            sent_count += 1
+            append_customer_message(customer_id, "admin", f"[Broadcast]\n{message}")
+        else:
+            failed_count += 1
+
+    save_broadcast_history(
+        message=message,
+        target_mode=mode,
+        target_query=query,
+        sent_count=sent_count,
+        failed_count=failed_count,
+    )
+    socketio.emit("analytics_updated", calculate_admin_analytics())
+    return jsonify(
+        {
+            "ok": True,
+            "message": f"ส่ง Broadcast สำเร็จ {sent_count} คน ไม่สำเร็จ {failed_count} คน",
+            "sent_count": sent_count,
+            "failed_count": failed_count,
+        }
+    )
 
 
 @app.post("/admin/chats/send")
@@ -1293,6 +1834,10 @@ def line_callback():
     return "OK"
 
 
+init_database()
+migrate_json_files_to_database()
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
-    app.run(host="0.0.0.0", port=port)
+    socketio.run(app, host="0.0.0.0", port=port, allow_unsafe_werkzeug=True)
